@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.5.0';
+  var VERSION = '1.5.1';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
   var $ = function (s, el) { return (el || document).querySelector(s); };
@@ -205,7 +205,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
 
   // ---------------- Navegación ----------------
-  var TITULOS = { calendario: 'Calendario', reservas: 'Reservas', nueva: 'Nueva reserva', editar: 'Editar reserva', reserva: 'Reserva', ajustes: 'Ajustes', admin: 'Administración' };
+  var TITULOS = { calendario: 'Calendario', reservas: 'Reservas', nueva: 'Nueva reserva', editar: 'Editar reserva', reserva: 'Reserva', ajustes: 'Ajustes', admin: 'Administración', servicios: 'Servicios y datos', hoja: 'Hoja de estancia' };
   function ruta() {
     var h = location.hash.replace(/^#\/?/, '');
     var q = {}, partes = h.split('?');
@@ -228,7 +228,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     $('#tituloVista').textContent = TITULOS[r.vista] || '';
     document.body.setAttribute('data-vista', r.vista);
     $$('.menu button').forEach(function (b) {
-      b.classList.toggle('activo', b.dataset.ir === r.vista || (b.dataset.ir === 'reservas' && r.vista === 'reserva') || (b.dataset.ir === 'ajustes' && r.vista === 'admin'));
+      b.classList.toggle('activo', b.dataset.ir === r.vista || (b.dataset.ir === 'reservas' && (r.vista === 'reserva' || r.vista === 'servicios' || r.vista === 'hoja')) || (b.dataset.ir === 'ajustes' && r.vista === 'admin'));
     });
     vista.scrollTop = 0; window.scrollTo(0, 0);
     switch (r.vista) {
@@ -238,6 +238,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       case 'editar': return pintarFormulario(r.id, r.q);
       case 'ajustes': return pintarAjustes();
       case 'admin': return pintarAdmin();
+      case 'servicios': return pintarServicios(r.id);
+      case 'hoja': return pintarHoja(r.id, r.q.modo);
       default: return pintarCalendario();
     }
   }
@@ -329,7 +331,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
           '<span class="punto"></span><span class="t">' + txt + '</span></button>';
       }).join('');
       var mas = ocultos.map(function (n, i) { return n ? '<span class="mas" style="grid-column:' + (i + 1) + ';grid-row:' + (MAXC + 2) + '">+' + n + '</span>' : ''; }).join('');
-      semanas += '<div class="semana" style="grid-template-rows:22px repeat(' + Math.max(1, Math.min(carriles.length, MAXC)) + ',auto)' + (ocultos.some(Boolean) ? ' 16px' : '') + ' 4px">' + celdas + franjas + mas + '</div>';
+      semanas += '<div class="semana" style="grid-template-rows:22px repeat(' + Math.max(1, Math.min(carriles.length, MAXC)) + ',auto)' + (ocultos.some(Boolean) ? ' 16px' : '') + ' minmax(4px, 1fr)">' + celdas + franjas + mas + '</div>';
     }
     var esHoy = m.getFullYear() === hoy.getFullYear() && m.getMonth() === hoy.getMonth();
     vista.innerHTML =
@@ -563,6 +565,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         '<div class="kpi"><b>' + pernoctan(r) + '</b><span>pernoctan</span></div>' +
         '<div class="kpi"><b>' + (cap ? Math.round(pernoctan(r) * 100 / cap) : 0) + '%</b><span>de ' + cap + ' plazas</span></div></div>' +
         '<div class="tarjeta"><h2>Habitaciones</h2>' + plano(r.asignaciones) + '</div>' : '') +
+      (!bloq && r.estado !== 'Cancelada' ? '<div class="tarjeta"><h2>Hoja de estancia</h2><p class="sub" style="margin:-4px 0 10px">' + resumenServicios(r) + '</p>' +
+        '<div class="fila-btns"><button class="btn sec" id="dServ">Servicios y datos</button><button class="btn sec" id="dHoja">Ver hoja de estancia</button></div></div>' : '') +
       '<div class="fila-btns">' +
       (r.estado !== 'Cancelada' ? (tel ? '<a class="btn sec" href="tel:' + esc(tel) + '">Llamar</a>' : '') + '<button class="btn" id="dEditar">Editar</button>' : '') +
       '</div>' +
@@ -574,6 +578,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         ? ' · Modificada por ' + esc(r.modificadoPor) + entreParen(marcaLegible(r.modificadoEl)) : '') + '</p>';
     enlazarVolver();
     if ($('#dEditar')) $('#dEditar').onclick = function () { ir('editar/' + encodeURIComponent(r.id)); };
+    if ($('#dServ')) $('#dServ').onclick = function () { ir('servicios/' + encodeURIComponent(r.id)); };
+    if ($('#dHoja')) $('#dHoja').onclick = function () { ir('hoja/' + encodeURIComponent(r.id) + '?modo=presupuesto'); };
     function accion(nombre, texto, boton, ok) {
       return function () {
         if (S.sinConexion) return toast('Sin conexión: no se puede hacer ahora.', true);
@@ -838,6 +844,180 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
 
   // ---------------- Ajustes ----------------
+  // ---------------- 1.5.0 · Servicios por día y hoja de estancia ----------------
+  var COMIDAS = [['Desayuno', '09:00'], ['Comida', '14:00'], ['Cena', '21:00']];
+  var SALAS = ['Salón', 'Salas', 'Capilla', 'Garaje'];
+  function cfg(clave) { var a = ((S.datos && S.datos.config) || []).filter(function (x) { return x.clave === clave; })[0]; return a ? String(a.valor == null ? '' : a.valor) : ''; }
+  function cfgNum(clave) { var v = cfg(clave).replace(',', '.').trim(); return v === '' || isNaN(+v) ? null : +v; }
+  function euros(n) { return n == null ? 'a consultar' : n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' }) + ' €'; }
+  function diasDe(r) { var out = [], d = r.entrada; while (d <= r.salida) { out.push(d); d = sumaDias(d, 1); } return out; }
+  function diaCorto(t) { var d = aFecha(t); return d.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '') + ' ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1); }
+  function mapaServ(r) { var m = {}; (r.servicios || []).forEach(function (x) { m[x.fecha + '|' + x.servicio] = x; }); return m; }
+  function resumenServicios(r) {
+    var sv = r.servicios || [];
+    if (!sv.length) return 'Aún no hay servicios apuntados. Rellénalos para preparar el presupuesto.';
+    var c = { Desayuno: 0, Comida: 0, Cena: 0, Noche: 0 };
+    sv.forEach(function (x) { if (c[x.servicio] != null) c[x.servicio] += (x.adultos || 0) + (x.ninos || 0); });
+    return c.Noche + ' pernoctaciones · ' + c.Desayuno + ' desayunos · ' + c.Comida + ' comidas · ' + c.Cena + ' cenas';
+  }
+
+  function pintarServicios(id) {
+    var r = reserva(id);
+    if (!r) { vista.innerHTML = botonVolver() + '<div class="vacio">La reserva no existe.</div>'; enlazarVolver(); return; }
+    var dias = diasDe(r), m = mapaServ(r), g = r.grupoDatos || {};
+    var aloj = tipo(r) === 'Alojamiento';
+    var maxA = 0, maxN = 0, maxB = 0;
+    (r.servicios || []).forEach(function (x) { maxA = Math.max(maxA, x.adultos); maxN = Math.max(maxN, x.ninos); maxB = Math.max(maxB, x.bebes); });
+    if (!(r.servicios || []).length) maxA = r.personas || 0;
+    function num(idc, v, lbl) { return '<label class="sv-num"><span>' + lbl + '</span><input class="entrada" type="number" inputmode="numeric" min="0" max="999" id="' + idc + '" value="' + (v ? v : '') + '" placeholder="0"></label>'; }
+    function filaComida(t, nombre) {
+      var x = m[t + '|' + nombre] || {};
+      return '<div class="sv-fila"><b>' + nombre + '</b>' + num('a_' + t + '_' + nombre, x.adultos, 'Adultos') + num('n_' + t + '_' + nombre, x.ninos, 'Niños') + '</div>';
+    }
+    var bloquesDias = dias.map(function (t, i) {
+      var ultimo = i === dias.length - 1;
+      return '<div class="sv-dia"><h3>' + esc(diaSemana(t)) + '</h3>' +
+        COMIDAS.map(function (c) { return filaComida(t, c[0]); }).join('') +
+        (aloj && !ultimo ? filaComida(t, 'Noche') : '') +
+        '<div class="sv-salas">' + SALAS.map(function (sa) {
+          var on = !!m[t + '|' + sa];
+          return '<label class="chip' + (on ? ' activo' : '') + '"><input type="checkbox" id="s_' + t + '_' + sa + '"' + (on ? ' checked' : '') + '> ' + sa + '</label>';
+        }).join('') + '</div></div>';
+    }).join('');
+    function campo(idc, lbl, v, extra) { return '<label class="campo"><span>' + lbl + '</span><input class="entrada" id="' + idc + '" value="' + esc(v || '') + '"' + (extra || '') + ' autocomplete="off"></label>'; }
+    vista.innerHTML = botonVolver() +
+      '<div class="tarjeta"><h2>' + esc(r.grupo) + '</h2><p class="sub" style="margin:-6px 0 0">' + esc(legible(r.entrada)) + ' ' + esc(r.horaEntrada) + ' → ' + esc(legible(r.salida)) + ' ' + esc(r.horaSalida) + '</p></div>' +
+      '<div class="tarjeta"><h2>Personas</h2>' +
+      '<div class="sv-pers">' + num('pA', maxA, 'Adultos (desde ' + (cfg('edad.adulto_desde') || 9) + ' años)') + num('pN', maxN, 'Niños de ' + ((+cfg('edad.gratis_hasta') || 4) + 1) + ' a ' + ((+cfg('edad.adulto_desde') || 9) - 1)) + num('pB', maxB, 'Niños de 0 a ' + (cfg('edad.gratis_hasta') || 4) + ' (gratis)') + '</div>' +
+      '<button type="button" class="btn sec ancho" id="svAuto" style="margin-top:10px">Rellenar todos los días según el horario</button>' +
+      '<p class="sub" style="margin:8px 0 0;font-size:13px">Pone estas personas en cada comida y noche que cae dentro de la estancia. Después puedes corregir cualquier día.</p></div>' +
+      '<div class="tarjeta"><h2>Servicios por día</h2>' + bloquesDias + '</div>' +
+      '<div class="tarjeta"><h2>Datos para los documentos</h2>' +
+      campo('gEnt', 'Entidad (nombre legal)', g.entidad, ' maxlength="120"') + campo('gCif', 'CIF', g.cif, ' maxlength="30"') +
+      campo('gDir', 'Dirección', g.direccion, ' maxlength="160"') + campo('gRep', 'Representante que firma', g.representante, ' maxlength="120"') +
+      '<div class="dos">' + campo('gDni', 'DNI', g.dni, ' maxlength="30"') + campo('gCar', 'Cargo', g.cargo, ' maxlength="60"') + '</div>' +
+      campo('gSen', 'Señal pagada (€)', g.senal, ' inputmode="decimal" maxlength="12" placeholder="0"') + '</div>' +
+      '<div class="pie-form"><div class="total" id="svTotal"></div><button class="btn" id="svGuardar">Guardar</button></div>';
+    enlazarVolver();
+    function v(idc) { var e = document.getElementById(idc); return e ? Math.max(0, Math.floor(+e.value || 0)) : 0; }
+    function leer() {
+      var out = [], bebes = v('pB');
+      dias.forEach(function (t) {
+        COMIDAS.concat([['Noche']]).forEach(function (c) {
+          var a = v('a_' + t + '_' + c[0]), n = v('n_' + t + '_' + c[0]);
+          if (a || n) out.push({ fecha: t, servicio: c[0], adultos: a, ninos: n, bebes: bebes });
+        });
+        SALAS.forEach(function (sa) { var e = document.getElementById('s_' + t + '_' + sa); if (e && e.checked) out.push({ fecha: t, servicio: sa, adultos: 1, ninos: 0, bebes: 0 }); });
+      });
+      return out;
+    }
+    function total() {
+      var c = calcularHoja({ servicios: leer(), grupoDatos: {} });
+      $('#svTotal').innerHTML = 'Previsto: <b>' + euros(c.total) + '</b>' + (c.consultar ? ' <small>+ a consultar</small>' : '');
+    }
+    total();
+    vista.oninput = function () { if ($('#svTotal')) total(); };
+    $$('.sv-salas input').forEach(function (e) { e.onchange = function () { e.parentNode.classList.toggle('activo', e.checked); total(); }; });
+    $('#svAuto').onclick = function () {
+      var a = v('pA'), n = v('pN');
+      dias.forEach(function (t, i) {
+        COMIDAS.forEach(function (c) {
+          var dentro = (t > r.entrada || c[1] >= r.horaEntrada) && (t < r.salida || c[1] < r.horaSalida);
+          var ea = document.getElementById('a_' + t + '_' + c[0]), en = document.getElementById('n_' + t + '_' + c[0]);
+          ea.value = dentro && a ? a : ''; en.value = dentro && n ? n : '';
+        });
+        var na = document.getElementById('a_' + t + '_Noche'), nn = document.getElementById('n_' + t + '_Noche');
+        if (na) { na.value = a || ''; nn.value = n || ''; }
+      });
+      total(); toast('Rellenado. Revisa los días y pulsa Guardar.');
+    };
+    $('#svGuardar').onclick = function () {
+      if (S.sinConexion) return toast('Sin conexión.', true);
+      var g2 = { entidad: $('#gEnt').value, cif: $('#gCif').value, direccion: $('#gDir').value, representante: $('#gRep').value, dni: $('#gDni').value, cargo: $('#gCar').value, senal: $('#gSen').value };
+      cargando(true);
+      api('guardarServicios', { id: r.id, servicios: leer(), grupoDatos: g2 }).then(function () { toast('Servicios guardados'); ir('reserva/' + encodeURIComponent(r.id)); })
+        .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
+    };
+  }
+
+  function calcularHoja(r) {
+    var sv = r.servicios || [], suma = {};
+    sv.forEach(function (x) { var k = x.servicio; suma[k] = suma[k] || { a: 0, n: 0, dias: 0 }; suma[k].a += x.adultos; suma[k].n += x.ninos; suma[k].dias++; });
+    var lineas = [];
+    function lin(txt, u, precio) { if (u > 0) lineas.push({ txt: txt, u: u, p: precio, imp: precio == null ? null : Math.round(u * precio * 100) / 100 }); }
+    [['Desayuno', 'desayuno', 'Desayuno'], ['Comida', 'comida', 'Comida'], ['Cena', 'cena', 'Cena'], ['Noche', 'noche', 'Alojamiento (noche)']].forEach(function (c) {
+      var x = suma[c[0]] || { a: 0, n: 0 };
+      lin(c[2] + ' · adulto', x.a, cfgNum('precio.adulto.' + c[1]));
+    });
+    [['Desayuno', 'desayuno', 'Desayuno'], ['Comida', 'comida', 'Comida'], ['Cena', 'cena', 'Cena'], ['Noche', 'noche', 'Alojamiento (noche)']].forEach(function (c) {
+      var x = suma[c[0]] || { a: 0, n: 0 };
+      lin(c[2] + ' · niño', x.n, cfgNum('precio.nino.' + c[1]));
+    });
+    [['Salón', 'salon'], ['Salas', 'salas'], ['Capilla', 'capilla'], ['Garaje', 'garaje']].forEach(function (c) {
+      var x = suma[c[0]]; if (x) lin(c[0] + ' (días)', x.dias, cfgNum('precio.' + c[1]));
+    });
+    var total = lineas.reduce(function (t, l) { return t + (l.imp || 0); }, 0);
+    var consultar = lineas.some(function (l) { return l.imp == null; });
+    var senal = +(String((r.grupoDatos || {}).senal || '').replace(',', '.')) || 0;
+    return { lineas: lineas, total: Math.round(total * 100) / 100, consultar: consultar, senal: senal, pendiente: Math.round((total - senal) * 100) / 100 };
+  }
+
+  function htmlHoja(r, modo) {
+    var liq = modo === 'liquidacion', m = mapaServ(r), g = r.grupoDatos || {}, c = calcularHoja(r);
+    var gratis = +cfg('edad.gratis_hasta') || 4, adulto = +cfg('edad.adulto_desde') || 9;
+    var dias = diasDe(r), aloj = tipo(r) === 'Alojamiento';
+    var adMax = 0, niMax = 0; (r.servicios || []).forEach(function (x) { if (SALAS.indexOf(x.servicio) < 0) { adMax = Math.max(adMax, x.adultos); niMax = Math.max(niMax, x.ninos); } });
+    function celda(t, sv) { var x = m[t + '|' + sv]; return x && (x.adultos || x.ninos) ? x.adultos + (x.ninos ? ' <small>+ ' + x.ninos + ' niños</small>' : '') : '—'; }
+    var filas = dias.map(function (t) {
+      var salas = SALAS.filter(function (sa) { return m[t + '|' + sa]; }).join(', ');
+      return '<tr><td class="l"><b>' + esc(diaCorto(t)) + '</b></td>' + COMIDAS.map(function (cm) { return '<td>' + celda(t, cm[0]) + '</td>'; }).join('') +
+        (aloj ? '<td>' + celda(t, 'Noche') + '</td>' : '') + '<td class="l">' + (esc(salas) || '—') + '</td></tr>';
+    }).join('');
+    var pie = esc(cfg('texto.pie_pago')).replace('{dias}', esc(cfg('pago.dias_despues') || '5')).replace('{casa}', esc(cfg('casa.nombre'))).replace('{iban}', '<b>' + esc(cfg('casa.iban')) + '</b>');
+    var hoy = legible(hoyTxt());
+    return '<div class="hoja-doc">' +
+      '<div class="hd-cab"><div><div class="hd-casa">' + esc(cfg('casa.nombre') || 'Casa de Espiritualidad María Madre') + '</div>' +
+      '<div class="hd-dir">' + esc(cfg('casa.direccion')) + ' · ' + esc(cfg('casa.cp_ciudad')) + ' · CIF ' + esc(cfg('casa.cif')) + '</div>' +
+      '<div class="hd-dir">' + esc(cfg('casa.telefono')) + ' · ' + esc(cfg('casa.email')) + '</div></div>' +
+      '<div class="hd-tit"><div>Hoja de estancia</div><span class="hd-sello' + (liq ? ' liq' : '') + '">' + (liq ? 'LIQUIDACIÓN' : 'PRESUPUESTO') + '</span><small>Ref. ' + esc(r.id) + ' · ' + hoy + '</small></div></div>' +
+      '<div class="hd-datos">' +
+      '<div><small>GRUPO</small><b>' + esc(r.grupo) + '</b></div>' +
+      '<div><small>RESPONSABLE</small>' + esc(r.responsable || '—') + (r.telefono ? ' · ' + esc(r.telefono) : '') + (r.email ? ' · ' + esc(r.email) : '') + '</div>' +
+      '<div><small>ENTRADA</small>' + esc(diaSemana(r.entrada)) + ', ' + esc(r.horaEntrada) + '</div>' +
+      '<div><small>SALIDA</small>' + esc(diaSemana(r.salida)) + ', ' + esc(r.horaSalida) + '</div>' +
+      '<div><small>PERSONAS</small>' + adMax + ' adultos' + (niMax ? ' · ' + niMax + ' niños (' + (gratis + 1) + ' a ' + (adulto - 1) + ' años)' : '') + '</div>' +
+      '<div><small>ENTIDAD Y CIF</small>' + (esc(g.entidad) || '—') + (g.cif ? ' · ' + esc(g.cif) : '') + (g.direccion ? '<br>' + esc(g.direccion) : '') + '</div></div>' +
+      (r.servicios && r.servicios.length ? '' : '<p class="hd-aviso">Todavía no hay servicios apuntados para esta reserva.</p>') +
+      '<h4>Servicios por día</h4><table class="hd-tabla"><tr><th class="l">Día</th>' + COMIDAS.map(function (cm) { return '<th>' + cm[0] + '</th>'; }).join('') + (aloj ? '<th>Noche</th>' : '') + '<th class="l">Salas</th></tr>' + filas + '</table>' +
+      '<h4>Importe</h4><table class="hd-tabla"><tr><th class="l">Concepto</th><th class="r">Unidades</th><th class="r">Precio</th><th class="r">Importe</th></tr>' +
+      c.lineas.map(function (l) { return '<tr><td class="l">' + esc(l.txt) + '</td><td class="r">' + l.u + '</td><td class="r">' + euros(l.p) + '</td><td class="r">' + (l.imp == null ? '—' : euros(l.imp)) + '</td></tr>'; }).join('') +
+      (c.lineas.length ? '' : '<tr><td class="l" colspan="4">—</td></tr>') + '</table>' +
+      '<div class="hd-fin"><div class="hd-cond"><b>Condiciones</b><br>Niños de 0 a ' + gratis + ' años: gratis. De ' + (gratis + 1) + ' a ' + (adulto - 1) + ' años: precio de niño. A partir de ' + adulto + ' años: como adulto.<br>' +
+      (cfgNum('precio.solo_uso') != null ? 'Solo uso de la casa (calefacción, luz, agua…): ' + euros(cfgNum('precio.solo_uso')) + ' por persona.<br>' : '') + esc(cfg('texto.condiciones')) + '</div>' +
+      '<div class="hd-tot"><div><span>Total' + (c.consultar ? '*' : '') + '</span><b>' + euros(c.total) + '</b></div><div><span>Señal pagada</span><span>' + euros(c.senal) + '</span></div>' +
+      '<div class="hd-pend"><b>Pendiente</b><b>' + euros(c.pendiente) + '</b></div>' + (c.consultar ? '<small>* Sin incluir los conceptos «a consultar».</small>' : '') + '</div></div>' +
+      '<div class="hd-pie">' + pie + '<br><span>' + (liq ? 'Cantidades realmente servidas, revisadas por el gestor.' : 'Calculado con los servicios previstos. La liquidación final se hará con lo realmente servido.') + '</span></div>' +
+      '</div>';
+  }
+
+  function pintarHoja(id, modo) {
+    var r = reserva(id);
+    if (!r) { vista.innerHTML = botonVolver() + '<div class="vacio">La reserva no existe.</div>'; enlazarVolver(); return; }
+    modo = modo === 'liquidacion' ? 'liquidacion' : 'presupuesto';
+    vista.innerHTML = botonVolver() +
+      '<div class="hoja-barra"><div class="segmento" id="hModo"><button type="button" data-m="presupuesto"' + (modo === 'presupuesto' ? ' class="activo"' : '') + '>Presupuesto</button><button type="button" data-m="liquidacion"' + (modo === 'liquidacion' ? ' class="activo"' : '') + '>Liquidación</button></div>' +
+      '<div class="fila-btns"><button class="btn sec" id="hServ">Corregir servicios</button><button class="btn" id="hPdf">Imprimir / PDF</button></div></div>' +
+      '<div class="hoja-marco">' + htmlHoja(r, modo) + '</div>';
+    enlazarVolver();
+    $('#hModo').onclick = function (e) { var b = e.target.closest('button'); if (b) ir('hoja/' + encodeURIComponent(r.id) + '?modo=' + b.dataset.m); };
+    $('#hServ').onclick = function () { ir('servicios/' + encodeURIComponent(r.id)); };
+    $('#hPdf').onclick = function () {
+      var t = document.title; document.title = (modo === 'liquidacion' ? 'Liquidación' : 'Presupuesto') + ' · ' + r.grupo;
+      document.body.classList.add('imprimiendo-hoja'); window.print();
+      setTimeout(function () { document.body.classList.remove('imprimiendo-hoja'); document.title = t; }, 800);
+    };
+  }
+
   // ---------------- Administración (solo administradores) ----------------
   function pintarAdmin() {
     if (!S.datos.esAdmin) { vista.innerHTML = botonVolver() + '<div class="vacio">Solo los administradores pueden ver esta pantalla.</div>'; enlazarVolver(); return; }
