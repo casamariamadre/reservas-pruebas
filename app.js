@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.4.0';
+  var VERSION = '1.5.0';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
   var $ = function (s, el) { return (el || document).querySelector(s); };
@@ -205,7 +205,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
 
   // ---------------- Navegación ----------------
-  var TITULOS = { calendario: 'Calendario', reservas: 'Reservas', nueva: 'Nueva reserva', editar: 'Editar reserva', reserva: 'Reserva', ajustes: 'Ajustes' };
+  var TITULOS = { calendario: 'Calendario', reservas: 'Reservas', nueva: 'Nueva reserva', editar: 'Editar reserva', reserva: 'Reserva', ajustes: 'Ajustes', admin: 'Administración' };
   function ruta() {
     var h = location.hash.replace(/^#\/?/, '');
     var q = {}, partes = h.split('?');
@@ -228,7 +228,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     $('#tituloVista').textContent = TITULOS[r.vista] || '';
     document.body.setAttribute('data-vista', r.vista);
     $$('.menu button').forEach(function (b) {
-      b.classList.toggle('activo', b.dataset.ir === r.vista || (b.dataset.ir === 'reservas' && r.vista === 'reserva'));
+      b.classList.toggle('activo', b.dataset.ir === r.vista || (b.dataset.ir === 'reservas' && r.vista === 'reserva') || (b.dataset.ir === 'ajustes' && r.vista === 'admin'));
     });
     vista.scrollTop = 0; window.scrollTo(0, 0);
     switch (r.vista) {
@@ -237,6 +237,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       case 'nueva': return pintarFormulario(null, r.q);
       case 'editar': return pintarFormulario(r.id, r.q);
       case 'ajustes': return pintarAjustes();
+      case 'admin': return pintarAdmin();
       default: return pintarCalendario();
     }
   }
@@ -837,6 +838,39 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
 
   // ---------------- Ajustes ----------------
+  // ---------------- Administración (solo administradores) ----------------
+  function pintarAdmin() {
+    if (!S.datos.esAdmin) { vista.innerHTML = botonVolver() + '<div class="vacio">Solo los administradores pueden ver esta pantalla.</div>'; enlazarVolver(); return; }
+    var cfg = S.datos.config || [], grupos = [], por = {}, orig = {};
+    cfg.forEach(function (a) { orig[a.clave] = a.valor; if (!por[a.grupo]) { por[a.grupo] = []; grupos.push(a.grupo); } por[a.grupo].push(a); });
+    function campo(a) {
+      var id = 'ad_' + a.clave.replace(/\W/g, '_');
+      var etiqueta = esc(a.descripcion) + (a.tipo === 'euros' ? ' (€)' : '');
+      if (a.tipo === 'largo') return '<label class="campo"><span>' + etiqueta + '</span><textarea class="entrada" id="' + id + '" data-k="' + esc(a.clave) + '" maxlength="2000">' + esc(a.valor) + '</textarea></label>';
+      var extra = a.tipo === 'euros' ? ' inputmode="decimal" placeholder="a consultar"' : a.tipo === 'num' ? ' inputmode="numeric"' : ' maxlength="120"';
+      return '<label class="campo"><span>' + etiqueta + '</span><input class="entrada" id="' + id + '" data-k="' + esc(a.clave) + '" value="' + esc(a.valor) + '"' + extra + ' autocomplete="off"></label>';
+    }
+    vista.innerHTML = botonVolver() +
+      '<div class="aviso-suave">Solo para administradores. Los cambios valen para los documentos que se hagan a partir de ahora; los ya enviados no cambian. Un precio vacío sale como «a consultar».</div>' +
+      grupos.map(function (g) { return '<div class="tarjeta"><h2>' + esc(g) + '</h2>' + por[g].map(campo).join('') + '</div>'; }).join('') +
+      '<div class="form-espacio"></div><div class="pie-form"><div class="total" id="adEstado">Sin cambios</div><button class="btn" id="adGuardar">Guardar cambios</button></div>';
+    function cambios() {
+      var v = {};
+      $$('[data-k]').forEach(function (el) { var k = el.dataset.k; if (String(el.value).trim() !== String(orig[k] == null ? '' : orig[k]).trim()) v[k] = el.value; });
+      return v;
+    }
+    vista.oninput = function () { var est = $('#adEstado'); if (!est) return; var n = Object.keys(cambios()).length; est.textContent = n ? n + (n === 1 ? ' cambio sin guardar' : ' cambios sin guardar') : 'Sin cambios'; };
+    enlazarVolver();
+    $('#adGuardar').onclick = function () {
+      var v = cambios(), n = Object.keys(v).length;
+      if (!n) return toast('No hay cambios que guardar.');
+      if (S.sinConexion) return toast('Sin conexión.', true);
+      cargando(true);
+      api('guardarAjustes', { valores: v }).then(function (d) { toast('Guardado · ' + d.cambios + (d.cambios === 1 ? ' cambio' : ' cambios')); pintarAdmin(); })
+        .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
+    };
+  }
+
   function pintarAjustes() {
     var c = lsGet('cache'), aj = S.datos.ajustes || {};
     vista.innerHTML =
@@ -846,6 +880,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       '<div class="dato"><span>Habitaciones disponibles</span><span>' + habitaciones().filter(function (h) { return h.estado === 'Disponible'; }).length + ' de ' + habitaciones().length + '</span></div>' +
       '<div class="dato"><span>Plazas disponibles</span><span>' + capacidadDisponible() + '</span></div>' +
       '<div class="dato"><span>Horario por defecto</span><span>Entrada ' + esc(aj.horaEntrada || '12:00') + ' · Salida ' + esc(aj.horaSalida || '16:00') + '</span></div></div>' +
+      (S.datos.esAdmin ? '<div class="tarjeta"><h2>Administración</h2><p class="sub" style="margin:0 0 10px">Precios, edades, datos de la casa, contrato, consumos y textos de los documentos.</p><button class="btn ancho" id="aAdmin">Abrir Administración</button></div>' : '') +
       '<details class="tarjeta mant"><summary>Mantenimiento (solo administración)</summary>' +
       '<p class="sub">Aviso de prueba: comprueba que llegan los avisos de reservas provisionales a ' + esc(aj.avisoPara || 'la cuenta de la casa') + '.</p>' +
       '<button class="btn borde ancho" id="aProbar">Enviar un aviso de prueba</button>' +
@@ -875,6 +910,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         if (!ok) return; window.__GAS_RESET__ && window.__GAS_RESET__(); lsDel('demoIniciada2'); lsDel('cache'); location.reload();
       });
     };
+    if ($('#aAdmin')) $('#aAdmin').onclick = function () { ir('admin'); };
     $('#aSalir').onclick = function () { confirmar('Tendrás que volver a escribir la clave para entrar.', 'Cerrar sesión', true).then(function (ok) { if (ok) salir(); }); };
   }
 
