@@ -6,9 +6,10 @@
  *          (datos ficticios guardados solo en el propio móvil; clave: demo).
  * GESTORES: nombres que aparecen en "¿Quién eres?". Se pueden cambiar cuando queráis.
  */
+/* ENTORNO DE PRUEBAS: conectado SOLO al puente de pruebas. No usar la dirección real. */
 window.CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbyw1k6M3CTxI93VFLE45b_I4Enb6INgo92kAvw5N3w8jNa4uCauKXrq0O9cmV3gQcO80w/exec',
-  NOMBRE_CASA: 'Casa María Madre',
+  API_URL: 'https://script.google.com/macros/s/AKfycbx-orTAQorIm-XT_Zg2-NMieXLaCYsaSM1eyoZ-wymEFrTEJlSzFWansV7XO3poX_yk/exec',
+  NOMBRE_CASA: 'Casa María Madre (PRUEBAS)',
   SUBTITULO: 'Guadalajara',
   GESTORES: ['Viviane', 'Rafael', 'Gema', 'Carlos'],
   CAPACIDAD_PREVISTA: 60

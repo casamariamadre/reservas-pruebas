@@ -1,6 +1,6 @@
 {
-  "name": "Casa María Madre – Ocupación",
-  "short_name": "María Madre",
+  "name": "PRUEBAS · Casa María Madre",
+  "short_name": "PRUEBAS MM",
   "description": "Gestión de reservas y ocupación de la Casa María Madre",
   "lang": "es",
   "start_url": "./",
@@ -8,7 +8,7 @@
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#FAF7F4",
-  "theme_color": "#85200C",
+  "theme_color": "#B07800",
   "icons": [
     {
       "src": "icons/icon-192.png",

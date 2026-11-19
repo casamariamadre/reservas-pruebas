@@ -12,9 +12,9 @@
   var TIPOS = ['Alojamiento', 'Día / sala', 'Bloqueo'];
 
   // ---------------- Almacenamiento local (con protección) ----------------
-  function lsGet(k) { try { return JSON.parse(localStorage.getItem('mm:' + k)); } catch (e) { return null; } }
-  function lsSet(k, v) { try { localStorage.setItem('mm:' + k, JSON.stringify(v)); } catch (e) {} }
-  function lsDel(k) { try { localStorage.removeItem('mm:' + k); } catch (e) {} }
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem('mmp:' + k)); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem('mmp:' + k, JSON.stringify(v)); } catch (e) {} }
+  function lsDel(k) { try { localStorage.removeItem('mmp:' + k); } catch (e) {} }
 
   // ---------------- Utilidades ----------------
   /** «2026-11-09 00:25» (o una fecha en otro formato) → «09/11/2026 00:25». «#####» o vacío → ''. */

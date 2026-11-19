@@ -1,6 +1,6 @@
 /* Guarda la app en el móvil para que abra rápido y sin conexión.
    Al publicar cambios, sube el número de VERSION para que los móviles se actualicen. */
-var VERSION = 'mm-v1.4.0';
+var VERSION = 'mmp-v1.4.0';
 var ARCHIVOS = ['./', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon.png'];
 
@@ -9,7 +9,7 @@ self.addEventListener('install', function (e) {
 });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (ks) {
-    return Promise.all(ks.filter(function (k) { return k !== VERSION; }).map(function (k) { return caches.delete(k); }));
+    return Promise.all(ks.filter(function (k) { return k !== VERSION && k.indexOf('mmp-') === 0; /* solo borra cachés de PRUEBAS */ }).map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
 self.addEventListener('fetch', function (e) {
