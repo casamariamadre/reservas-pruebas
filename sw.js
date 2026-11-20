@@ -1,7 +1,7 @@
 /* Guarda la app en el móvil para que abra rápido y sin conexión.
    Al publicar cambios, sube el número de VERSION para que los móviles se actualicen. */
-var VERSION = 'mmp-v1.5.2';
-var ARCHIVOS = ['./', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
+var VERSION = 'mmp-v1.6.0';
+var ARCHIVOS = ['./', 'index.html', 'styles.css', 'database.js', 'app.js', 'config.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon.png'];
 
 self.addEventListener('install', function (e) {

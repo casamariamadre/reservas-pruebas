@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.5.2';
+  var VERSION = '1.6.0';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
   var $ = function (s, el) { return (el || document).querySelector(s); };
@@ -80,49 +80,15 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     });
   }
 
-  // ---------------- Comunicación con Google (o demostración) ----------------
-  var demoListo = null;
-  function cargarScript(src) {
-    return new Promise(function (ok, ko) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { ko(new Error('No se encuentra el archivo ' + src + '. ¿Se subió la carpeta «demo» a GitHub?')); }; document.head.appendChild(s); });
+  // ---------------- Datos (todo pasa por database.js) ----------------
+  /** Ejecuta una operación de database.js con el gestor actual y guarda el estado actualizado que devuelve. */
+  function usarDB(fn) {
+    DB.conectar({ gestor: S.gestor, clave: S.clave });
+    return fn().then(function (r) { if (r && r.estado) fijarDatos(r.estado); return r; });
   }
-  function prepararDemo() {
-    if (!demoListo) {
-      demoListo = cargarScript('demo/gas-mock.js').then(function () { return cargarScript('demo/codigo.js'); }).then(function () {
-        window.CLAVE_ACCESO = 'demo';
-        if (!lsGet('demoIniciada2')) {
-          window.__GAS_RESET__ && window.__GAS_RESET__();
-          window.configurar();
-          var p = function (d) { return window.atender({ clave: 'demo', gestor: 'Demo', accion: 'guardarReserva', datos: d }); };
-          var e1 = sumaDias(hoyTxt(), 5);
-          p({ reserva: { grupo: 'Retiro parroquial (ejemplo)', responsable: 'Ana López', telefono: '600000000', email: 'ana@ejemplo.es', entrada: e1, salida: sumaDias(e1, 2), estado: 'Confirmada' },
-            asignaciones: [{ habitacion: 16, personas: 3 }, { habitacion: 17, personas: 3 }, { habitacion: 19, personas: 5 }, { habitacion: 11, personas: 2 }] });
-          p({ reserva: { grupo: 'Lectura creyente (ejemplo)', tipo: 'Día / sala', responsable: 'Óscar M.', entrada: sumaDias(e1, 1), horaEntrada: '10:00', salida: sumaDias(e1, 1), horaSalida: '13:00', estado: 'Confirmada' } });
-          var e2 = sumaDias(e1, 16);
-          p({ reserva: { grupo: 'Ejercicios espirituales (ejemplo)', responsable: 'Luis Pérez', telefono: '611111111', entrada: e2, salida: sumaDias(e2, 3) },
-            asignaciones: [{ habitacion: 23, personas: 4 }, { habitacion: 24, personas: 4 }, { habitacion: 25, personas: 3 }] });
-          p({ reserva: { tipo: 'Bloqueo', grupo: 'DESCANSO', entrada: sumaDias(e2, 7), salida: sumaDias(e2, 8), estado: 'Confirmada' } });
-          var r = p({ reserva: { grupo: 'Grupo anulado (ejemplo)', responsable: 'Paqui', email: 'paqui@ejemplo.es', entrada: sumaDias(e1, 9), salida: sumaDias(e1, 11) } });
-          if (r && r.ok) window.atender({ clave: 'demo', gestor: 'Demo', accion: 'cancelarReserva', datos: { id: r.datos.id } });
-          lsSet('demoIniciada2', true);
-        }
-      });
-    }
-    return demoListo;
-  }
-
-  function api(accion, datos) {
-    var pet = { clave: S.clave, gestor: S.gestor, accion: accion, datos: datos || {} };
-    var p = DEMO
-      ? prepararDemo().then(function () { return new Promise(function (ok) { setTimeout(function () { ok(window.atender(JSON.parse(JSON.stringify(pet)))); }, 200); }); })
-      : fetch(C.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(pet), redirect: 'follow' })
-          .then(function (r) { if (!r.ok) throw new Error('El servidor respondió ' + r.status); return r.json(); })
-          .catch(function (e) { if (e instanceof TypeError) { var x = new Error(navigator.onLine === false ? 'Sin conexión. Revisa la cobertura e inténtalo de nuevo.' : 'No se pudo conectar con Google. Revisa que API_URL termine en /exec y que el script esté implementado para «Cualquier usuario».'); x.red = true; throw x; } if (e instanceof SyntaxError) throw new Error('Google no devolvió datos válidos. Revisa la implementación del script.'); throw e; });
-    return p.then(function (r) {
-      if (!r || !r.ok) { var err = new Error((r && r.error) || 'Error desconocido'); err.codigo = r && r.codigo; throw err; }
-      if (r.datos && r.datos.estado) fijarDatos(r.datos.estado);
-      if (accion === 'inicial') fijarDatos(r.datos);
-      return r.datos;
-    });
+  function cargarTodo() {
+    DB.conectar({ gestor: S.gestor, clave: S.clave });
+    return DB.cargarTodo().then(function (d) { fijarDatos(d); return d; });
   }
 
   function fijarDatos(d) { S.datos = d; S.sinConexion = false; lsSet('cache', { datos: d, cuando: Date.now() }); avisoConexion(); }
@@ -144,7 +110,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   /** Recarga datos. Si se está editando una reserva NO se redibuja (para no perder lo escrito). */
   function recargar(silencioso) {
     if (!silencioso) cargando(true);
-    return api('inicial').then(function () { if (!editando()) pintar(); })
+    return cargarTodo().then(function () { if (!editando()) pintar(); })
       .catch(function (e) {
         if (e.codigo === 'CLAVE') return salir('La clave ya no es válida. Vuelve a entrar.');
         var c = lsGet('cache');
@@ -271,7 +237,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       if (!clave) return ($('#lError').textContent = 'Escribe tu clave.');
       S.clave = clave; S.gestor = elegido;
       cargando(true);
-      api('inicial').then(function () {
+      cargarTodo().then(function () {
         lsSet('clave', clave); lsSet('gestor', elegido);
         if (!location.hash || location.hash === '#/') location.hash = '/calendario'; else pintar();
       }).catch(function (e) {
@@ -586,7 +552,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         confirmar(texto, boton, true).then(function (si) {
           if (!si) return;
           cargando(true);
-          api(nombre, { id: r.id }).then(function () { toast(ok); ir('calendario'); })
+          usarDB(function () { return DB[nombre](r.id); }).then(function () { toast(ok); ir('calendario'); })
             .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
         });
       };
@@ -831,7 +797,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       seguir.then(function (ok) {
         if (!ok) return;
         cargando(true);
-        api('guardarReserva', { reserva: d, asignaciones: asignaciones })
+        usarDB(function () { return DB.guardarReserva(d, asignaciones); })
           .then(function (res) {
             lsDel(claveBorrador);
             toast((r ? 'Cambios guardados' : 'Reserva creada') + (res.solapes && res.solapes.length ? ' · coincide con: ' + res.solapes.join(', ') : ''));
@@ -935,7 +901,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       if (S.sinConexion) return toast('Sin conexión.', true);
       var g2 = { entidad: $('#gEnt').value, cif: $('#gCif').value, direccion: $('#gDir').value, representante: $('#gRep').value, dni: $('#gDni').value, cargo: $('#gCar').value, senal: $('#gSen').value };
       cargando(true);
-      api('guardarServicios', { id: r.id, servicios: leer(), grupoDatos: g2 }).then(function () { toast('Servicios guardados'); ir('reserva/' + encodeURIComponent(r.id)); })
+      usarDB(function () { return DB.guardarServicios(r.id, leer(), g2); }).then(function () { toast('Servicios guardados'); ir('reserva/' + encodeURIComponent(r.id)); })
         .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
     };
   }
@@ -1210,7 +1176,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       if (!n) return toast('No hay cambios que guardar.');
       if (S.sinConexion) return toast('Sin conexión.', true);
       cargando(true);
-      api('guardarAjustes', { valores: v }).then(function (d) { toast('Guardado · ' + d.cambios + (d.cambios === 1 ? ' cambio' : ' cambios')); pintarAdmin(); })
+      usarDB(function () { return DB.guardarAjustes(v); }).then(function (d) { toast('Guardado · ' + d.cambios + (d.cambios === 1 ? ' cambio' : ' cambios')); pintarAdmin(); })
         .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
     };
   }
@@ -1240,7 +1206,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         confirmar(texto, 'Continuar').then(function (ok) {
           if (!ok) return;
           cargando(true);
-          api(nombre).then(function (d) { toast(fmt(d)); pintarAjustes(); })
+          usarDB(function () { return DB[nombre](); }).then(function (d) { toast(fmt(d)); pintarAjustes(); })
             .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
         });
       };
