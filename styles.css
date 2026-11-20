@@ -555,3 +555,5 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 /* v1.6.4: sin zoom al tocar dos veces (el zoom con dos dedos se mantiene) y sin zoom automático al escribir */
 * { touch-action: manipulation; }
 input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: max(16px, 1em); }
+/* v1.7.0: formulario del grupo */
+.etiqueta.form { background: #E3ECF8; color: #1D4E89; }

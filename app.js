@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.6.4';
+  var VERSION = '1.7.0';
   var VERSION_FECHA = '20/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -149,6 +149,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var t = '';
     if (r.estado === 'Cancelada') t += '<span class="etiqueta cancelada">Cancelada</span> ';
     else if (r.estado === 'Provisional' && tipo(r) !== 'Bloqueo') t += '<span class="etiqueta provisional">Provisional</span> ';
+    if (r.formulario && r.formulario.estado === 'Recibido' && r.estado !== 'Cancelada') t += '<span class="etiqueta form">Formulario recibido</span> ';
     if (tipo(r) !== 'Alojamiento') t += '<span class="etiqueta tipo">' + esc(tipo(r)) + '</span> ';
     if (esPasada(r) && r.estado !== 'Cancelada') t += '<span class="etiqueta pasada">Pasada</span> ';
     if (tipo(r) !== 'Bloqueo') {
@@ -173,7 +174,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
 
   // ---------------- Navegación ----------------
-  var TITULOS = { calendario: 'Calendario', reservas: 'Reservas', nueva: 'Nueva reserva', editar: 'Editar reserva', reserva: 'Reserva', ajustes: 'Ajustes', admin: 'Administración', servicios: 'Servicios y datos', hoja: 'Hoja de estancia' };
+  var TITULOS = { calendario: 'Calendario', reservas: 'Reservas', nueva: 'Nueva reserva', editar: 'Editar reserva', reserva: 'Reserva', ajustes: 'Ajustes', admin: 'Administración', servicios: 'Servicios y datos', hoja: 'Hoja de estancia', formulario: 'Formulario del grupo' };
   function ruta() {
     var h = location.hash.replace(/^#\/?/, '');
     var q = {}, partes = h.split('?');
@@ -196,7 +197,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     $('#tituloVista').textContent = TITULOS[r.vista] || '';
     document.body.setAttribute('data-vista', r.vista);
     $$('.menu button').forEach(function (b) {
-      b.classList.toggle('activo', b.dataset.ir === r.vista || (b.dataset.ir === 'reservas' && (r.vista === 'reserva' || r.vista === 'servicios' || r.vista === 'hoja')) || (b.dataset.ir === 'ajustes' && r.vista === 'admin'));
+      b.classList.toggle('activo', b.dataset.ir === r.vista || (b.dataset.ir === 'reservas' && (r.vista === 'reserva' || r.vista === 'servicios' || r.vista === 'hoja' || r.vista === 'formulario')) || (b.dataset.ir === 'ajustes' && r.vista === 'admin'));
     });
     vista.scrollTop = 0; window.scrollTo(0, 0);
     switch (r.vista) {
@@ -208,6 +209,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       case 'admin': return pintarAdmin();
       case 'servicios': return pintarServicios(r.id);
       case 'hoja': return pintarHoja(r.id, r.q.modo);
+      case 'formulario': return pintarFormularioRecibido(r.id);
       default: return pintarCalendario();
     }
   }
@@ -587,6 +589,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         '<div class="tarjeta"><h2>Habitaciones</h2>' + plano(r.asignaciones) + '</div>' : '') +
       (!bloq && r.estado !== 'Cancelada' ? '<div class="tarjeta"><h2>Hoja de estancia</h2><p class="sub" style="margin:-4px 0 10px">' + resumenServicios(r) + '</p>' +
         '<div class="fila-btns"><button class="btn sec" id="dServ">Servicios y datos</button><button class="btn sec" id="dHoja">Ver hoja de estancia</button></div></div>' : '') +
+      (!bloq && r.estado !== 'Cancelada' ? tarjetaFormulario(r) : '') +
       '<div class="fila-btns">' +
       (r.estado !== 'Cancelada' ? (tel ? '<a class="btn sec" href="tel:' + esc(tel) + '">Llamar</a>' : '') + (puedeConfirmar(r) ? '<button class="btn confirmar" id="dConfirmar">✓ Confirmar</button>' : '') + '<button class="btn" id="dEditar">Editar</button>' : '') +
       '</div>' +
@@ -601,6 +604,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if ($('#dConfirmar')) $('#dConfirmar').onclick = function () { ir('editar/' + encodeURIComponent(r.id) + '?confirmar=1'); };
     if ($('#dServ')) $('#dServ').onclick = function () { ir('servicios/' + encodeURIComponent(r.id)); };
     if ($('#dHoja')) $('#dHoja').onclick = function () { ir('hoja/' + encodeURIComponent(r.id) + '?modo=presupuesto'); };
+    enlazarFormulario(r);
     function accion(nombre, texto, boton, ok) {
       return function () {
         if (S.sinConexion) return toast('Sin conexión: no se puede hacer ahora.', true);
@@ -1204,6 +1208,115 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         return nombre;
       });
     });
+  }
+
+  // ---------------- 1.7.0 · Formulario del grupo (lado del gestor) ----------------
+  function marcaCorta(m) { return m ? legible(String(m).slice(0, 10)) + (String(m).length > 10 ? ' ' + String(m).slice(11, 16) : '') : ''; }
+  function tarjetaFormulario(r) {
+    var f = r.formulario, e = f ? f.estado : '';
+    var txt = !f ? 'Aún no se ha enviado el enlace al grupo.' :
+      e === 'Pendiente' ? 'Enlace creado. Esperando a que el grupo lo rellene' + (f.enviadoEl ? ' (último envío: ' + marcaCorta(f.enviadoEl) + ')' : '') + '.' :
+      e === 'Recibido' ? '<b>Recibido el ' + marcaCorta(f.enviadoEl) + '.</b> Pendiente de revisar y aplicar.' :
+      e === 'Aplicado' ? 'Aplicado a la reserva (recibido el ' + marcaCorta(f.enviadoEl) + ').' :
+      e === 'Cerrado' ? 'Cerrado: el grupo ya no puede usarlo.' : esc(e);
+    var b = [];
+    if (e === 'Recibido') b.push('<button class="btn" id="fRevisar">Revisar y aplicar</button>');
+    else if (f && f.datos) b.push('<button class="btn sec" id="fRevisar">Ver lo recibido</button>');
+    if (e !== 'Cerrado') b.push('<button class="btn sec" id="fEnviar">' + (f ? 'Enviar el enlace otra vez' : 'Enviar enlace al grupo') + '</button>');
+    return '<div class="tarjeta"><h2>Formulario del grupo</h2><p class="sub" style="margin:-4px 0 10px">' + txt + '</p>' +
+      '<div class="fila-btns">' + b.join('') + '</div>' +
+      (f ? '<p class="sub" style="margin:10px 0 0;font-size:13px"><button class="enlace" id="fAbrir">' + (e === 'Cerrado' ? 'Volver a abrir el formulario' : 'Cerrar el formulario') + '</button></p>' : '') + '</div>';
+  }
+  function enlazarFormulario(r) {
+    if ($('#fRevisar')) $('#fRevisar').onclick = function () { ir('formulario/' + encodeURIComponent(r.id)); };
+    if ($('#fEnviar')) $('#fEnviar').onclick = function () {
+      if (S.sinConexion) return toast('Sin conexión.', true);
+      cargando(true);
+      usarDB(function () { return DB.prepararFormulario(r.id); })
+        .then(function (d) { cargando(false); compartirEnlace(reserva(r.id) || r, d.enlace); })
+        .catch(function (e) { cargando(false); toast(e.message, true); });
+    };
+    if ($('#fAbrir')) $('#fAbrir').onclick = function () {
+      var abrir = r.formulario.estado === 'Cerrado';
+      confirmar(abrir ? 'El grupo podrá volver a usar su enlace (hasta el día de entrada).' : 'El grupo ya no podrá usar su enlace. Podrás volver a abrirlo cuando quieras.', abrir ? 'Abrir' : 'Cerrar').then(function (ok) {
+        if (!ok) return;
+        cargando(true);
+        usarDB(function () { return DB.abrirFormulario(r.id, abrir); }).then(function () { toast(abrir ? 'Formulario abierto' : 'Formulario cerrado'); pintar(); })
+          .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
+      });
+    };
+  }
+  function compartirEnlace(r, enlace) {
+    var texto = 'Hola. Para preparar vuestra estancia en la Casa de Espiritualidad María Madre (' + legible(r.entrada) + ' a ' + legible(r.salida) +
+      '), por favor rellenad este formulario. Podéis corregirlo con el mismo enlace hasta el día de entrada:';
+    modal('<p style="margin-bottom:6px"><b>Enlace del formulario</b></p><p class="sub" style="margin:0 0 10px">Envíalo al responsable del grupo. Solo sirve para esta reserva.</p>' +
+      '<input class="entrada" id="feEnlace" readonly value="' + esc(enlace) + '" style="font-size:14px">' +
+      '<div class="fila-btns" style="margin-top:10px">' + (navigator.share ? '<button class="btn" data-r="share">Compartir…</button>' : '') +
+      '<button class="btn sec" data-r="copiar">Copiar</button></div>' +
+      '<div class="fila-btns" style="margin-top:8px"><a class="btn sec" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(texto + ' ' + enlace) + '">WhatsApp</a>' +
+      '<a class="btn sec" href="mailto:' + esc(r.email || '') + '?subject=' + encodeURIComponent('Formulario de su estancia · Casa María Madre') + '&body=' + encodeURIComponent(texto + '\n\n' + enlace) + '">Correo</a></div>' +
+      '<div class="fila-btns" style="margin-top:8px"><button class="btn borde" data-r="0">Cerrar</button></div>',
+      function (e, cerrar) {
+        var b = e.target.closest('[data-r]'); if (!b) return;
+        if (b.dataset.r === '0') { cerrar(); pintar(); return; }
+        if (b.dataset.r === 'share') { navigator.share({ title: 'Formulario · Casa María Madre', text: texto, url: enlace }).catch(function () {}); return; }
+        if (b.dataset.r === 'copiar') {
+          var i = $('#feEnlace'); i.select(); i.setSelectionRange(0, 9999);
+          (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(enlace) : Promise.reject()).then(function () { toast('Enlace copiado'); })
+            .catch(function () { try { document.execCommand('copy'); toast('Enlace copiado'); } catch (x) { toast('Mantén pulsado el enlace para copiarlo.', true); } });
+        }
+      });
+  }
+
+  function pintarFormularioRecibido(id) {
+    var r = reserva(id);
+    if (!r || !r.formulario || !r.formulario.datos) { vista.innerHTML = botonVolver() + '<div class="vacio">No hay ningún formulario recibido para esta reserva.</div>'; enlazarVolver(); return; }
+    var f = r.formulario, d = f.datos, p = d.personas || {}, g = d.grupo || {}, c = d.contacto || {}, h = d.habitaciones || {}, gd = r.grupoDatos || {};
+    function fila(et, nuevo, actual) {
+      var cambia = actual != null && String(nuevo || '') !== String(actual || '');
+      return '<div class="dato"><span>' + et + '</span><span>' + (esc(nuevo) || '—') + (cambia ? '<br><small class="sub">ahora: ' + (esc(actual) || '—') + '</small>' : '') + '</span></div>';
+    }
+    var pers = (p.adultos || 0) + (p.ninos || 0) + (p.bebes || 0);
+    var porSv = {}; (d.servicios || []).forEach(function (x) { (porSv[x.fecha] = porSv[x.fecha] || []).push(x.servicio + ' ' + x.total); });
+    var salas = {}; (d.salas || []).forEach(function (x) { (salas[x.fecha] = salas[x.fecha] || []).push(x.sala); });
+    var dias = Object.keys(porSv).concat(Object.keys(salas)).filter(function (x, i, a) { return a.indexOf(x) === i; }).sort();
+    var gratis = cfg('edad.gratis_hasta') || 4, adulto = cfg('edad.adulto_desde') || 9;
+    vista.innerHTML = botonVolver() +
+      '<div class="tarjeta"><h2>' + esc(r.grupo) + '</h2><p class="sub" style="margin:-6px 0 0">Recibido el ' + marcaCorta(f.enviadoEl) + ' · estado: <b>' + esc(f.estado) + '</b></p></div>' +
+      '<div class="tarjeta"><h2>Personas</h2>' +
+      fila('Adultos (desde ' + adulto + ')', p.adultos) + fila('Niños de ' + (+gratis + 1) + ' a ' + (adulto - 1), p.ninos) + fila('Niños de 0 a ' + gratis, p.bebes) +
+      fila('Total en la reserva', pers, r.personas) + '</div>' +
+      '<div class="tarjeta"><h2>Contacto y datos para documentos</h2>' +
+      fila('Teléfono', c.telefono, r.telefono) + fila('Correo', c.email, r.email) +
+      fila('Entidad', g.entidad, gd.entidad) + fila('CIF', g.cif, gd.cif) + fila('Dirección', g.direccion, gd.direccion) +
+      fila('Representante', g.representante, gd.representante) + fila('DNI', g.dni, gd.dni) + fila('Cargo', g.cargo, gd.cargo) + '</div>' +
+      '<div class="tarjeta"><h2>Servicios y salas</h2>' + (dias.length ? dias.map(function (t) {
+        return '<div class="dato"><span>' + esc(diaCorto(t)) + '</span><span>' + esc((porSv[t] || []).join(' · ')) + (salas[t] ? '<br><small class="sub">' + esc(salas[t].join(', ')) + '</small>' : '') + '</span></div>';
+      }).join('') : '<p class="sub">Sin servicios.</p>') +
+      (r.servicios && r.servicios.length ? '<p class="sub" style="margin:8px 0 0;font-size:13px">Al aplicar se sustituyen los servicios que tiene ahora la reserva.</p>' : '') + '</div>' +
+      (tipo(r) === 'Alojamiento' ? '<div class="tarjeta"><h2>Habitaciones (preferencias)</h2>' +
+        fila('Matrimonios', h.matrimonios) + fila('Comparten', h.comparten) + fila('Individuales', h.individual) + fila('Jóvenes en literas', h.literas) +
+        fila('Movilidad reducida', h.movilidad) + (h.observaciones ? fila('Observaciones', h.observaciones) : '') +
+        '<p class="sub" style="margin:8px 0 0;font-size:13px">Se guardan para el reparto de habitaciones (no cambian las habitaciones asignadas).</p></div>' : '') +
+      '<div class="tarjeta"><h2>Alergias</h2>' + ((d.alergias || []).length ? d.alergias.map(function (a) {
+        return '<div class="dato"><span>Persona ' + esc(a.persona) + '</span><span>' + esc(a.alergenos.concat(a.otras ? [a.otras] : []).join(', ')) + '</span></div>';
+      }).join('') : '<p class="sub">Ninguna.</p>') + '</div>' +
+      '<div class="tarjeta"><h2>Protección de datos</h2>' +
+      '<div class="dato"><span>Tratamiento de datos</span><span>' + (d.consentimientos && d.consentimientos.datos ? 'Sí' : 'No') + '</span></div>' +
+      '<div class="dato"><span>Imágenes</span><span>' + (d.consentimientos && d.consentimientos.imagenes ? 'Sí' : 'No') + '</span></div>' +
+      '<div class="dato"><span>Actúa en nombre del grupo</span><span>' + (d.consentimientos && d.consentimientos.autorizacion ? 'Sí' : 'No') + '</span></div></div>' +
+      '<div class="form-espacio"></div><div class="pie-form"><div class="total">' + (f.estado === 'Aplicado' ? 'Ya aplicado' : 'Pendiente de aplicar') + '</div>' +
+      '<button class="btn" id="frAplicar">' + (f.estado === 'Aplicado' ? 'Aplicar de nuevo' : 'Aplicar a la reserva') + '</button></div>';
+    enlazarVolver();
+    $('#frAplicar').onclick = function () {
+      if (S.sinConexion) return toast('Sin conexión.', true);
+      confirmar('Se pasarán a la reserva el teléfono, el correo, el número de personas, los datos para documentos, los servicios por día, las salas y las alergias. Después podrás corregir lo que quieras.', 'Aplicar').then(function (ok) {
+        if (!ok) return;
+        cargando(true);
+        usarDB(function () { return DB.aplicarFormulario(r.id); }).then(function () { toast('Formulario aplicado a la reserva'); ir('reserva/' + encodeURIComponent(r.id)); })
+          .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
+      });
+    };
   }
 
   // ---------------- Administración (solo administradores) ----------------

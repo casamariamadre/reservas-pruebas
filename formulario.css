@@ -1,0 +1,64 @@
+/* Formulario del grupo · Casa María Madre (página pública, sin clave) */
+* { box-sizing: border-box; touch-action: manipulation; }
+html, body { margin: 0; background: #F6F2EC; color: #1A1A1A; font: 15px/1.45 Arial, Helvetica, sans-serif; }
+#fg { max-width: 560px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+.fg-cab { background: #fff; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 8px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E0D9CF; }
+.fg-marca { display: flex; align-items: center; gap: 10px; font-family: Georgia, "Times New Roman", serif; font-size: 13px; line-height: 1.2; color: #85200C; }
+.fg-marca img { width: 38px; height: 38px; border-radius: 8px; }
+.fg-marca b { font-size: 16px; }
+.fg-paso { font-size: 12px; color: #555; }
+.fg-barra { background: #fff; padding: 0 16px 8px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.fg-barra span { height: 5px; border-radius: 3px; background: #E0D9CF; }
+.fg-barra span.on { background: #85200C; }
+.fg-grupo { background: #fff; padding: 0 16px 10px; font-size: 12.5px; color: #555; border-bottom: 1px solid #E0D9CF; }
+.fg-grupo:empty { display: none; }
+main { flex: 1; padding: 14px 12px 24px; display: flex; flex-direction: column; gap: 12px; }
+h2 { font-family: Georgia, "Times New Roman", serif; font-size: 19px; margin: 0 0 4px; }
+.hint { font-size: 13px; color: #555; line-height: 1.45; }
+.card { background: #fff; border: 1px solid #E0D9CF; border-radius: 12px; padding: 12px 14px; }
+.card-tit { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.card-tit.pri { color: #85200C; }
+label.f { display: block; font-size: 13px; font-weight: 700; color: #333; margin: 10px 0 4px; }
+input[type=text], input[type=tel], input[type=email], textarea { width: 100%; border: 1px solid #9A9A9A; border-radius: 8px; padding: 0 10px; font-size: 16px; min-height: 44px; font-family: inherit; background: #fff; color: inherit; }
+textarea { padding: 10px; min-height: 70px; resize: vertical; }
+input[readonly] { background: #F1EDE7; color: #444; border-color: #D6D0C8; }
+input:focus, textarea:focus { outline: none; border-color: #85200C; box-shadow: 0 0 0 3px rgba(133, 32, 12, .15); }
+.paso-fila { display: flex; align-items: center; justify-content: space-between; min-height: 56px; border-bottom: 1px solid #EEE; gap: 8px; }
+.paso-fila:last-child { border-bottom: 0; }
+.paso-fila .t { font-size: 15px; font-weight: 700; }
+.stp { display: flex; align-items: center; gap: 6px; flex: none; }
+.stp button { width: 44px; height: 44px; border-radius: 22px; border: 1px solid #85200C; background: #fff; color: #85200C; font-size: 22px; line-height: 1; cursor: pointer; }
+.stp output { min-width: 32px; text-align: center; font-size: 18px; font-weight: 700; }
+.tabla-wrap { overflow-x: auto; }
+table.g { border-collapse: collapse; width: 100%; }
+table.g th { font-size: 11px; color: #555; font-weight: 700; padding: 4px 2px; text-transform: uppercase; }
+table.g td { text-align: center; padding: 3px 2px; border-top: 1px solid #EEE; font-size: 13px; }
+table.g th.l { text-align: left; text-transform: none; font-size: 13px; color: #1A1A1A; }
+table.g input[type=text] { width: 52px; min-height: 40px; text-align: center; padding: 0; }
+table.g input[type=checkbox] { width: 24px; height: 24px; accent-color: #85200C; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.seg button { height: 44px; border-radius: 10px; border: 1px solid #D6D0C8; background: #fff; font-size: 15px; font-weight: 700; color: #333; cursor: pointer; }
+.seg button.on { border-color: #85200C; background: #85200C; color: #fff; }
+.per { border: 1px solid #E0D9CF; border-radius: 10px; padding: 10px 10px 12px; margin-top: 10px; background: #FBF8F4; }
+.per-cab { display: flex; align-items: center; justify-content: space-between; }
+.algrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.al { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px; border: 1px solid #D6D0C8; border-radius: 10px; background: #fff; font-size: 14px; cursor: pointer; }
+.al input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: #85200C; }
+.al.on { border-color: #85200C; background: #F6E6E1; font-weight: 700; }
+.chk { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.4; padding: 8px 0; cursor: pointer; }
+.chk input { width: 22px; height: 22px; flex: none; margin: 0; accent-color: #85200C; }
+.ok-box { background: #E8F2EA; border: 1px solid #9CC5A8; color: #1F5F3A; border-radius: 10px; padding: 10px 12px; font-size: 14px; font-weight: 700; }
+.av-box { background: #FFF4D6; border: 1px solid #E8C66A; color: #6B4A10; border-radius: 10px; padding: 10px 12px; font-size: 14px; font-weight: 700; }
+.resumen { font-size: 14px; line-height: 1.65; }
+.fg-pie { position: sticky; bottom: 0; background: #fff; border-top: 1px solid #E0D9CF; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 10px; }
+.fg-pie button { height: 50px; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
+.b-sec { flex: 1; border: 1px solid #85200C; background: #fff; color: #85200C; }
+.b-pri { flex: 2; border: 0; background: #85200C; color: #fff; }
+.b-pri:disabled { opacity: .5; }
+.fg-cargando { text-align: center; color: #555; padding: 60px 0; }
+.fg-spinner { width: 36px; height: 36px; border: 4px solid #E0D9CF; border-top-color: #85200C; border-radius: 50%; margin: 0 auto 12px; animation: gira 0.9s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+.fg-toast { position: fixed; left: 16px; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); max-width: 480px; margin: 0 auto; background: #2B2522; color: #fff; padding: 12px 16px; border-radius: 12px; text-align: center; z-index: 10; }
+.fg-toast.error { background: #B42318; }
+.fin { text-align: center; padding: 30px 10px; }
+.fin .ic { width: 64px; height: 64px; border-radius: 50%; background: #E8F2EA; color: #1F5F3A; display: grid; place-items: center; margin: 0 auto 12px; font-size: 34px; font-weight: 700; }

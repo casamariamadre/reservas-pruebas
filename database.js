@@ -19,6 +19,12 @@
  *   DB.probarAviso()                      → { para, via, avisosProgramados, estado? }
  *   DB.regenerarCalendario()              → { eventos, estado }
  *   DB.importarCalendario()               → { importadas, omitidas, estado }
+ *   DB.prepararFormulario(id)             → { id, enlace, estado, estado }   (crea el enlace del grupo si no existe)
+ *   DB.aplicarFormulario(id)              → { id, estado }   (pasa a la reserva lo que envió el grupo)
+ *   DB.abrirFormulario(id, abierto)       → { id, estado, estado }
+ *   Formulario público del grupo (sin clave de gestor, con su enlace):
+ *   DB.leerFormulario(enlace)             → { abierto, motivo, reserva, enviado, ajustes, alergenos, salas }
+ *   DB.enviarFormulario(enlace, datos)    → { recibido }
  * «estado» es lo mismo que devuelve cargarTodo(), ya actualizado tras el cambio.
  *
  * Errores: se lanza un Error con mensaje en español; err.codigo === 'CLAVE' si la clave
@@ -29,9 +35,9 @@
   var URL_DATOS = (window.CONFIG || {}).API_URL || '';
   var sesion = { gestor: '', clave: '' };
 
-  function llamar(accion, datos) {
+  function llamar(accion, datos, token) {
     if (!URL_DATOS) return Promise.reject(new Error('Falta la dirección de los datos (API_URL en config.js).'));
-    var pet = { clave: sesion.clave, gestor: sesion.gestor, accion: accion, datos: datos || {} };
+    var pet = token ? { token: token, accion: accion, datos: datos || {} } : { clave: sesion.clave, gestor: sesion.gestor, accion: accion, datos: datos || {} };
     return fetch(URL_DATOS, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(pet), redirect: 'follow' })
       .then(function (r) { if (!r.ok) throw new Error('El servidor respondió ' + r.status); return r.json(); })
       .catch(function (e) {
@@ -59,6 +65,11 @@
     guardarAjustes: async function (valores) { return llamar('guardarAjustes', { valores: valores || {} }); },
     probarAviso: async function () { return llamar('probarAviso'); },
     regenerarCalendario: async function () { return llamar('regenerarCalendario'); },
-    importarCalendario: async function () { return llamar('importarCalendario'); }
+    importarCalendario: async function () { return llamar('importarCalendario'); },
+    prepararFormulario: async function (id) { return llamar('formularioEnlace', { id: id }); },
+    aplicarFormulario: async function (id) { return llamar('formularioAplicar', { id: id }); },
+    abrirFormulario: async function (id, abierto) { return llamar('formularioEstado', { id: id, abierto: !!abierto }); },
+    leerFormulario: async function (enlace) { return llamar('formLeer', {}, String(enlace || '')); },
+    enviarFormulario: async function (enlace, datos) { return llamar('formEnviar', datos || {}, String(enlace || '')); }
   };
 })();
