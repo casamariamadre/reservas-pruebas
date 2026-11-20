@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.6.3';
+  var VERSION = '1.6.4';
   var VERSION_FECHA = '20/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -1303,20 +1303,6 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if (b.dataset.ir === 'calendario') S.mes = null;
     ir(b.dataset.ir);
   };
-  // iPhone con la app instalada: el sistema da a la página menos alto que la pantalla (queda una franja abajo).
-  // Se ajusta la app al alto real de la pantalla, también al girar el móvil.
-  function ajustarAlto() {
-    var ios = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    var instalada = window.navigator.standalone === true;
-    var app = $('#app'); if (!app) return;
-    if (!ios || !instalada) { app.style.height = ''; app.style.bottom = ''; return; }
-    var vertical = window.innerHeight >= window.innerWidth;
-    var alto = vertical ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-    app.style.bottom = 'auto'; app.style.height = alto + 'px';
-  }
-  ajustarAlto();
-  window.addEventListener('resize', ajustarAlto);
-  window.addEventListener('orientationchange', function () { setTimeout(ajustarAlto, 300); });
   $('#btnRecargar').onclick = function () { recargar(); };
   window.addEventListener('hashchange', pintar);
   // Al volver a la app (si han pasado más de 2 minutos): comprobar con el reloj y luego mostrar.

@@ -546,3 +546,12 @@ details.ad-grupo[open] > summary { margin-bottom: 10px; }
 .ad-n { font-size: 12px; font-weight: 700; color: var(--texto-2); background: var(--linea); border-radius: 999px; padding: 1px 8px; }
 .ad-punto { width: 9px; height: 9px; border-radius: 50%; background: #D97706; display: none; }
 details.ad-grupo.con-cambios .ad-punto { display: inline-block; }
+/* v1.6.4: campos de fecha y hora siempre dentro de su hueco (en el iPhone tienen un ancho mínimo propio) */
+.dos { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+.dos > * { min-width: 0; }
+.modal .dos { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+input[type="date"].entrada, input[type="time"].entrada { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; }
+input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { text-align: left; }
+/* v1.6.4: sin zoom al tocar dos veces (el zoom con dos dedos se mantiene) y sin zoom automático al escribir */
+* { touch-action: manipulation; }
+input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: max(16px, 1em); }
