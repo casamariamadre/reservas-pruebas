@@ -19,6 +19,7 @@
  *   DB.probarAviso()                      → { para, via, avisosProgramados, estado? }
  *   DB.regenerarCalendario()              → { eventos, estado }
  *   DB.importarCalendario()               → { importadas, omitidas, estado }
+ *   DB.anotar(id, tipo, texto)            → { id, estado }   (bitácora: nota, enlace enviado, presupuesto/contrato/liquidación enviados, fianza)
  *   DB.prepararFormulario(id)             → { id, enlace, estado, estado }   (crea el enlace del grupo si no existe)
  *   DB.aplicarFormulario(id)              → { id, estado }   (pasa a la reserva lo que envió el grupo)
  *   DB.abrirFormulario(id, abierto)       → { id, estado, estado }
@@ -58,7 +59,7 @@
   window.DB = {
     conectar: function (s) { sesion.gestor = String((s && s.gestor) || ''); sesion.clave = String((s && s.clave) || ''); },
     cargarTodo: async function () { return llamar('inicial'); },
-    guardarReserva: async function (reserva, asignaciones) { return llamar('guardarReserva', { reserva: reserva, asignaciones: asignaciones || [] }); },
+    guardarReserva: async function (reserva, asignaciones, origen) { return llamar('guardarReserva', { reserva: reserva, asignaciones: asignaciones || [], origen: origen || '' }); },
     cancelarReserva: async function (id) { return llamar('cancelarReserva', { id: id }); },
     borrarReserva: async function (id) { return llamar('borrarReserva', { id: id }); },
     guardarServicios: async function (id, servicios, datosGrupo) { return llamar('guardarServicios', { id: id, servicios: servicios || [], grupoDatos: datosGrupo || {} }); },
@@ -66,6 +67,7 @@
     probarAviso: async function () { return llamar('probarAviso'); },
     regenerarCalendario: async function () { return llamar('regenerarCalendario'); },
     importarCalendario: async function () { return llamar('importarCalendario'); },
+    anotar: async function (id, tipo, texto) { return llamar('anotar', { id: id, tipo: tipo, texto: texto || '' }); },
     prepararFormulario: async function (id) { return llamar('formularioEnlace', { id: id }); },
     aplicarFormulario: async function (id) { return llamar('formularioAplicar', { id: id }); },
     abrirFormulario: async function (id, abierto) { return llamar('formularioEstado', { id: id, abierto: !!abierto }); },

@@ -1,6 +1,6 @@
 /* Guarda la app en el móvil para que abra rápido y sin conexión.
    Al publicar cambios, sube el número de VERSION para que los móviles se actualicen. */
-var VERSION = 'mmp-v1.8.0';
+var VERSION = 'mmp-v1.9.0';
 var ARCHIVOS = ['./', 'index.html', 'styles.css', 'database.js', 'app.js', 'config.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon.png'];
 

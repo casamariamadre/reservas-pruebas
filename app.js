@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.8.0';
+  var VERSION = '1.9.0';
   var VERSION_FECHA = '20/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -62,7 +62,13 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     clearTimeout(toast._t);
     toast._t = setTimeout(function () { t.hidden = true; }, error ? 5500 : 2800);
   }
-  function cargando(on) { $('#cargando').hidden = !on; }
+  // El reloj solo aparece si la espera dura más de medio segundo (para que no parpadee en cada acción).
+  var relojT = null;
+  function cargando(on) {
+    clearTimeout(relojT);
+    if (on) relojT = setTimeout(function () { $('#cargando').hidden = false; }, 500);
+    else $('#cargando').hidden = true;
+  }
   function modal(html, alPulsar) {
     var m = $('#modal');
     m.innerHTML = '<div class="caja">' + html + '</div>';
@@ -186,8 +192,15 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   var historial = 0;
   window.addEventListener('hashchange', function () { historial++; });
   function volver() { if (historial > 0 && history.length > 1) history.back(); else ir('calendario'); }
-  function botonVolver() { return '<button class="volver" id="bVolver"><span>‹</span> Volver</button>'; }
-  function enlazarVolver(antes) { var b = $('#bVolver'); if (b) b.onclick = function () { if (antes) antes(); volver(); }; }
+  // 1.9.0: «Volver» va abajo: en la barra de «Guardar» si la hay; si no, en una barra propia.
+  function botonVolver() { return ''; }
+  function enlazarVolver(antes) {
+    var pie = vista.querySelector('.pie-form');
+    var b = '<button type="button" class="btn borde js-volver">‹ Volver</button>';
+    if (pie) pie.insertAdjacentHTML('afterbegin', b);
+    else vista.insertAdjacentHTML('beforeend', '<div class="pie-form pie-volver">' + b + '</div>');
+    $$('.js-volver').forEach(function (x) { x.onclick = function () { if (antes) antes(); volver(); }; });
+  }
 
   function pintar() {
     if (!S.clave) return pintarLogin();
@@ -565,52 +578,206 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
 
   // ---------------- Detalle ----------------
+  // ---------------- 1.9.0 · Ficha de la reserva: evolución, siguiente paso y bitácora ----------------
+  /** Última anotación de la bitácora cuya acción empieza por alguno de los textos dados. */
+  function ultimaNota(r, acciones) {
+    return (r.bitacora || []).filter(function (b) { return acciones.some(function (a) { return b.accion.indexOf(a) === 0; }); })[0] || null;
+  }
+  function cuandoQuien(b) { return b ? fechaCorta(b.fecha) + ' · ' + b.gestor : ''; }
+  function fechaCorta(m) { var t = String(m || ''); return t ? legible(t.slice(0, 10)).slice(0, 5) : ''; }
+  /** Estado de un documento según su última marca: { enviado, b } */
+  function marcaDoc(r, si, no) { var b = ultimaNota(r, [si, no]); return { enviado: !!(b && b.accion.indexOf(si) === 0), b: b }; }
+  function fianzaPagada(r) {
+    var b = ultimaNota(r, ['Fianza pagada', 'Fianza pendiente']);
+    if (b) return { pagada: b.accion === 'Fianza pagada', b: b };
+    var s = parseFloat(String((r.grupoDatos || {}).senal || '').replace(',', '.'));
+    return { pagada: s > 0, b: null };
+  }
+
+  /** Los pasos de la reserva, con su estado: ok (hecho), ahora (en curso), aviso (revisar), pend (pendiente). */
+  function pasosReserva(r) {
+    var P = [], hoy = hoyTxt(), aloj = tipo(r) === 'Alojamiento', idq = encodeURIComponent(r.id);
+    // 1. Reserva
+    var conf = ultimaNota(r, ['Reserva confirmada']), crea = ultimaNota(r, ['Crear']);
+    P.push(r.estado === 'Confirmada'
+      ? { t: 'Reserva', e: 'ok', txt: 'Confirmada', cq: cuandoQuien(conf) }
+      : { t: 'Reserva', e: 'ahora', txt: 'Provisional', cq: cuandoQuien(crea) || (r.creadoPor ? fechaCorta(r.creadoEl) + ' · ' + r.creadoPor : ''),
+          acc: { txt: 'Confirmar', fn: function () { ir('editar/' + idq + '?confirmar=1'); } }, sig: 'Confirmar la reserva' });
+    // 2. Formulario del grupo
+    var f = r.formulario, fuera = hoy > r.entrada;
+    var env = ultimaNota(r, ['Formulario: enlace enviado', 'Formulario: enlace compartido', 'Formulario: enlace copiado', 'Formulario: enlace creado']);
+    var rec = ultimaNota(r, ['Formulario recibido']), apl = ultimaNota(r, ['Formulario aplicado']);
+    if (!f) P.push(fuera ? { t: 'Formulario', e: 'pend', txt: 'No se envió', cq: '' }
+      : { t: 'Formulario', e: 'pend', txt: 'Sin enviar', cq: '', acc: { txt: 'Enviar', fn: function () { enviarEnlaceForm(r); } }, sig: 'Enviar el formulario al grupo' });
+    else if (f.estado === 'Recibido') P.push({ t: 'Formulario', e: 'aviso', txt: 'Recibido · falta revisar y aplicar', cq: cuandoQuien(rec) || fechaCorta(f.enviadoEl) + ' · Grupo',
+      acc: { txt: 'Revisar', fn: function () { ir('formulario/' + idq); } }, sig: 'Revisar y aplicar el formulario' });
+    else if (f.estado === 'Aplicado') P.push({ t: 'Formulario', e: 'ok', txt: 'Recibido y aplicado', cq: cuandoQuien(apl) });
+    else if (f.datos) P.push({ t: 'Formulario', e: 'ok', txt: 'Recibido', cq: fechaCorta(f.enviadoEl) + ' · Grupo' });
+    else if (f.estado === 'Cerrado' || fuera) P.push({ t: 'Formulario', e: 'pend', txt: 'Sin respuesta del grupo', cq: '' });
+    else P.push({ t: 'Formulario', e: 'ahora', txt: 'Enviado · esperando al grupo', cq: cuandoQuien(env), espera: true,
+      acc: { txt: 'Reenviar', fn: function () { enviarEnlaceForm(r); } } });
+    // 3. Habitaciones
+    if (aloj) {
+      var rep = ultimaNota(r, ['Reparto de habitaciones']), n = (r.asignaciones || []).length;
+      var reenv = f && f.enviadoEl && repartoSegun(r) && f.enviadoEl > repartoSegun(r);
+      if (!n) P.push({ t: 'Habitaciones', e: 'pend', txt: 'Sin reparto', cq: '', acc: { txt: 'Repartir', fn: function () { ir('reparto/' + idq); } }, sig: 'Hacer el reparto de habitaciones' });
+      else P.push({ t: 'Habitaciones', e: reenv ? 'aviso' : 'ok', txt: n + ' hab. · ' + pernoctan(r) + ' pers.' + (reenv ? ' · el grupo cambió su formulario' : ''),
+        cq: cuandoQuien(rep), acc: { txt: reenv ? 'Revisar' : 'Ver', fn: function () { ir('reparto/' + idq); } }, sig: reenv ? 'Revisar el reparto de habitaciones' : '' });
+    }
+    // 4. Presupuesto
+    var pre = marcaDoc(r, 'Presupuesto enviado', 'Presupuesto: marcado');
+    P.push(pre.enviado ? { t: 'Presupuesto', e: 'ok', txt: 'Enviado', cq: cuandoQuien(pre.b), acc: { txt: 'Ver', fn: function () { ir('hoja/' + idq + '?modo=presupuesto'); } }, marca: { txt: 'Deshacer', tipo: 'presupuesto_no' } }
+      : { t: 'Presupuesto', e: 'pend', txt: 'Sin enviar', cq: '', acc: { txt: 'Ver', fn: function () { ir('hoja/' + idq + '?modo=presupuesto'); } },
+          marca: { txt: 'Marcar enviado', tipo: 'presupuesto_enviado' }, sig: 'Enviar el presupuesto' });
+    // 5. Contrato y fianza
+    var con = marcaDoc(r, 'Contrato enviado', 'Contrato: marcado'), fz = fianzaPagada(r);
+    P.push({ t: 'Contrato y fianza', e: con.enviado && fz.pagada ? 'ok' : con.enviado || fz.pagada ? 'ahora' : 'pend',
+      txt: 'Contrato: ' + (con.enviado ? 'enviado' : 'sin enviar') + ' · Fianza: ' + (fz.pagada ? 'pagada' : 'pendiente'),
+      cq: cuandoQuien(fz.b && (!con.b || fz.b.fecha > con.b.fecha) ? fz.b : con.b),
+      marcas: [con.enviado ? { txt: 'Deshacer: contrato', tipo: 'contrato_no' } : { txt: 'Marcar contrato enviado', tipo: 'contrato_enviado' },
+        fz.pagada ? { txt: 'Deshacer: fianza', tipo: 'fianza_pendiente' } : { txt: 'Marcar fianza pagada', tipo: 'fianza_pagada' }],
+      sig: !con.enviado ? 'Enviar el contrato' : !fz.pagada ? 'Comprobar la fianza' : '', sigMarca: !con.enviado ? 'contrato_enviado' : 'fianza_pagada' });
+    // 6. Estancia
+    var dias = Math.round((aFecha(r.entrada) - aFecha(hoy)) / 864e5);
+    P.push(hoy < r.entrada ? { t: 'Estancia', e: 'pend', txt: 'Empieza ' + (dias === 1 ? 'mañana' : 'en ' + dias + ' días'), cq: '' }
+      : hoy <= r.salida ? { t: 'Estancia', e: 'ahora', txt: 'En curso hasta el ' + legible(r.salida).slice(0, 5), cq: '' }
+      : { t: 'Estancia', e: 'ok', txt: 'Terminada el ' + legible(r.salida).slice(0, 5), cq: '' });
+    // 7. Liquidación
+    var liq = marcaDoc(r, 'Liquidación enviada', 'Liquidación: marcada'), empezo = hoy >= r.entrada;
+    P.push(liq.enviado ? { t: 'Liquidación', e: 'ok', txt: 'Enviada', cq: cuandoQuien(liq.b), acc: { txt: 'Ver', fn: function () { ir('hoja/' + idq + '?modo=liquidacion'); } }, marca: { txt: 'Deshacer', tipo: 'liquidacion_no' } }
+      : { t: 'Liquidación', e: empezo ? 'ahora' : 'pend', txt: 'Pendiente', cq: '', acc: empezo ? { txt: 'Hacer', fn: function () { ir('hoja/' + idq + '?modo=liquidacion'); } } : null,
+          marca: empezo ? { txt: 'Marcar enviada', tipo: 'liquidacion_enviada' } : null, sig: empezo ? 'Hacer y enviar la liquidación' : '' });
+    return P;
+  }
+
+  function enviarEnlaceForm(r) {
+    if (S.sinConexion) return toast('Sin conexión.', true);
+    cargando(true);
+    usarDB(function () { return DB.prepararFormulario(r.id); })
+      .then(function (d) { cargando(false); compartirEnlace(reserva(r.id) || r, d.enlace); })
+      .catch(function (e) { cargando(false); toast(e.message, true); });
+  }
+  function anotar(r, tipoNota, texto, ok) {
+    if (S.sinConexion) return toast('Sin conexión.', true);
+    cargando(true);
+    usarDB(function () { return DB.anotar(r.id, tipoNota, texto); })
+      .then(function () { if (ok) toast(ok); pintar(); })
+      .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
+  }
+
+  /** Bitácora: texto corto para cada anotación. */
+  function textoBitacora(b) {
+    var a = b.accion;
+    if (a === 'Crear') return 'Reserva creada (' + ((b.detalle.split(' · ').pop()) || '').toLowerCase() + ')';
+    if (a === 'Modificar') return 'Datos de la reserva cambiados';
+    if (a === 'Servicios') return 'Servicios y datos guardados';
+    if (a === 'Cancelar') return 'Reserva cancelada';
+    if (a === 'Nota') return '📝 ' + b.detalle;
+    if (a === 'Reparto de habitaciones') return 'Reparto de habitaciones guardado (' + b.detalle + ')';
+    if (a === 'Formulario aplicado') return 'Formulario aplicado a la reserva';
+    if (a === 'Aviso provisional') return 'Aviso de provisional enviado a la casa';
+    return a.replace(/^Formulario: /, 'Formulario: ');
+  }
+
   function pintarDetalle(id) {
     var r = reserva(id);
     if (!r) { vista.innerHTML = botonVolver() + '<div class="vacio">La reserva no existe.</div>'; enlazarVolver(); return; }
     $('#tituloVista').textContent = r.grupo;
-    var cap = capacidadDisponible();
+    var q = ruta().q || {};
     var tel = String(r.telefono || '').replace(/[^\d+]/g, '');
-    var bloq = tipo(r) === 'Bloqueo';
-    vista.innerHTML = botonVolver() +
-      '<div class="tarjeta det ' + clases(r) + '">' + etiquetas(r) +
-      '<h2 style="margin-top:8px">' + esc(r.grupo) + '</h2>' +
+    var bloq = tipo(r) === 'Bloqueo', canc = r.estado === 'Cancelada', aloj = tipo(r) === 'Alojamiento';
+    var pasos = (bloq || canc) ? [] : pasosReserva(r);
+    // Siguiente paso: el primero que se puede hacer ahora (sin contar lo que espera al grupo)
+    var sig = pasos.filter(function (p) { return p.sig && p.e !== 'ok' && !p.espera; })[0];
+    var ICON = { ok: '✓', ahora: '●', aviso: '!', pend: '○' };
+    function lineaPaso(p, i) {
+      var btns = [];
+      if (p.acc) btns.push('<button class="paso-acc" data-p="' + i + '" data-k="acc">' + esc(p.acc.txt) + '</button>');
+      if (p.marca) btns.push('<button class="paso-acc" data-p="' + i + '" data-k="marca">' + esc(p.marca.txt) + '</button>');
+      (p.marcas || []).forEach(function (m, j) { btns.push('<button class="paso-acc" data-p="' + i + '" data-k="m' + j + '">' + esc(m.txt) + '</button>'); });
+      return '<div class="paso-l e-' + p.e + '"><span class="paso-i" aria-hidden="true">' + ICON[p.e] + '</span>' +
+        '<div class="paso-t"><b>' + esc(p.t) + '</b> <span>' + esc(p.txt) + '</span>' + (p.cq ? '<small>' + esc(p.cq) + '</small>' : '') + '</div>' +
+        (btns.length ? '<div class="paso-b' + (btns.length > 1 ? ' dos' : '') + '">' + btns.join('') + '</div>' : '') + '</div>';
+    }
+    var bit = r.bitacora || [], verTodo = S.bitTodo === r.id;
+    var bitHtml = bit.length ? (verTodo ? bit : bit.slice(0, 5)).map(function (b) {
+      return '<li><span class="bit-f">' + esc(marcaLegible(b.fecha)) + '</span><span class="bit-q">' + esc(b.gestor) + '</span><span class="bit-t">' + esc(textoBitacora(b)) + '</span></li>';
+    }).join('') : '<li class="sub">Aún no hay anotaciones.</li>';
+    var datos =
       '<div class="dato"><span>Tipo</span><span>' + esc(tipo(r)) + '</span></div>' +
-      '<div class="dato"><span>' + (bloq ? 'Desde' : 'Entrada') + '</span><span>' + esc(diaSemana(r.entrada)) + ' · ' + esc(r.horaEntrada) + '</span></div>' +
-      '<div class="dato"><span>' + (bloq ? 'Hasta' : 'Salida') + '</span><span>' + esc(diaSemana(r.salida)) + ' · ' + esc(r.horaSalida) + '</span></div>' +
-      (tipo(r) === 'Alojamiento' ? '<div class="dato"><span>Noches</span><span>' + noches(r) + '</span></div>' : '') +
       (!bloq ? '<div class="dato"><span>Responsable</span><span>' + esc(r.responsable || '—') + '</span></div>' +
         '<div class="dato' + (!r.telefono ? ' falta-tel' : '') + '"><span>Teléfono</span><span>' + (tel ? '<a href="tel:' + esc(tel) + '">' + esc(r.telefono) + '</a>' : 'Sin teléfono') + '</span></div>' +
         '<div class="dato' + (!r.email ? ' falta-email' : '') + '"><span>Email</span><span>' + (r.email ? '<a href="mailto:' + esc(r.email) + '">' + esc(r.email) + '</a>' : 'Sin email') + '</span></div>' : '') +
+      (aloj ? '<div class="dato"><span>Personas</span><span>' + (r.personas || 0) + ' · pernoctan ' + pernoctan(r) + '</span></div>' : '') +
       (r.observaciones ? '<div class="dato"><span>Observaciones</span><span>' + esc(r.observaciones) + '</span></div>' : '') +
       (r.estado === 'Provisional' && !bloq ? '<div class="dato"><span>Aviso a 1 mes</span><span>' + (r.avisoEnviado ? 'Enviado el ' + esc(r.avisoEnviado) : 'Pendiente') + '</span></div>' : '') +
-      '</div>' +
-      (tipo(r) === 'Alojamiento' ? '<div class="kpis"><div class="kpi"><b>' + (r.personas || 0) + '</b><span>personas</span></div>' +
-        '<div class="kpi"><b>' + pernoctan(r) + '</b><span>pernoctan</span></div>' +
-        '<div class="kpi"><b>' + (cap ? Math.round(pernoctan(r) * 100 / cap) : 0) + '%</b><span>de ' + cap + ' plazas</span></div></div>' +
-        '<div class="tarjeta"><h2>Habitaciones</h2>' + avisoReparto(r) + plano(r.asignaciones) +
-        (r.estado !== 'Cancelada' ? '<div class="fila-btns" style="margin-top:10px"><button class="btn sec" id="dReparto">Reparto de habitaciones</button>' +
-          ((r.asignaciones || []).length ? '<button class="btn sec" id="dHojaHab">Hoja de habitaciones</button>' : '') + '</div>' : '') + '</div>' : '') +
-      (!bloq && r.estado !== 'Cancelada' ? '<div class="tarjeta"><h2>Hoja de estancia</h2><p class="sub" style="margin:-4px 0 10px">' + resumenServicios(r) + '</p>' +
-        '<div class="fila-btns"><button class="btn sec" id="dServ">Servicios y datos</button><button class="btn sec" id="dHoja">Ver hoja de estancia</button></div></div>' : '') +
-      (!bloq && r.estado !== 'Cancelada' ? tarjetaFormulario(r) : '') +
-      '<div class="fila-btns">' +
-      (r.estado !== 'Cancelada' ? (tel ? '<a class="btn sec" href="tel:' + esc(tel) + '">Llamar</a>' : '') + (puedeConfirmar(r) ? '<button class="btn confirmar" id="dConfirmar">✓ Confirmar</button>' : '') + '<button class="btn" id="dEditar">Editar</button>' : '') +
-      '</div>' +
-      '<div class="fila-btns" style="margin-top:10px">' +
-      (r.estado !== 'Cancelada' ? '<button class="btn peligro" id="dCancelar">Cancelar reserva</button>' : '') +
-      '<button class="btn peligro borde-p" id="dBorrar">Borrar</button></div>' +
-      '<p class="sub" style="margin-top:16px;font-size:12px">Creada por ' + esc(r.creadoPor || '—') + entreParen(marcaLegible(r.creadoEl)) +
+      '<p class="sub" style="margin:8px 0 0;font-size:12px">Creada por ' + esc(r.creadoPor || '—') + entreParen(marcaLegible(r.creadoEl)) +
       (r.modificadoPor && (marcaLegible(r.modificadoEl) !== marcaLegible(r.creadoEl) || r.modificadoPor !== r.creadoPor)
-        ? ' · Modificada por ' + esc(r.modificadoPor) + entreParen(marcaLegible(r.modificadoEl)) : '') + '</p>';
+        ? ' · Modificada por ' + esc(r.modificadoPor) + entreParen(marcaLegible(r.modificadoEl)) : '') + '</p>' +
+      '<div class="fila-btns" style="margin-top:10px">' + (tel && !canc ? '<a class="btn sec" href="tel:' + esc(tel) + '">Llamar</a>' : '') +
+      (!canc ? '<button class="btn sec" id="dEditar">Editar datos</button>' : '') + '</div>';
+    function apartado(clave, titulo, resumen, cuerpo) {
+      return '<details class="apartado" data-ap="' + clave + '"' + (q.abrir === clave ? ' open' : '') + '><summary><b>' + titulo + '</b><span>' + resumen + '</span></summary><div class="ap-cuerpo">' + cuerpo + '</div></details>';
+    }
+    var fTarjeta = (!bloq && !canc) ? tarjetaFormulario(r).replace(/^<div class="tarjeta"><h2>Formulario del grupo<\/h2>/, '').replace(/<\/div>$/, '') : '';
+    vista.innerHTML = botonVolver() +
+      // Cabecera
+      '<div class="tarjeta exp-cab ' + clases(r) + '"><h2>' + esc(r.grupo) + '</h2>' +
+      '<div class="exp-fechas">' + esc(diaSemana(r.entrada)) + ' ' + esc(r.horaEntrada) + ' → ' + esc(diaSemana(r.salida)) + ' ' + esc(r.horaSalida) +
+      (aloj ? ' · ' + noches(r) + ' noches' : '') + '</div>' + etiquetas(r) + '</div>' +
+      // Evolución
+      (pasos.length ? '<div class="tarjeta exp-pasos"><h2>Evolución</h2>' + pasos.map(lineaPaso).join('') + '</div>' : '') +
+      // Siguiente paso
+      (pasos.length ? '<div class="exp-sig">' + (sig ? '<span>Siguiente paso</span><button class="btn" id="dSig">' + esc(sig.sig) + '</button>'
+        : '<span>' + (pasos.some(function (p) { return p.espera; }) ? 'Esperando el formulario del grupo.' : 'Todo al día.') + '</span>') + '</div>' : '') +
+      // Apartados plegados
+      apartado('datos', 'Datos de la reserva', esc(r.responsable || tipo(r)), datos) +
+      (fTarjeta ? apartado('formulario', 'Formulario del grupo', esc(pasos[1] ? pasos[1].txt : ''), fTarjeta) : '') +
+      (aloj && !canc ? apartado('habitaciones', 'Habitaciones', (r.asignaciones || []).length ? pernoctan(r) + ' pers. en ' + r.asignaciones.length + ' hab.' : 'Sin reparto',
+        avisoReparto(r) + plano(r.asignaciones) + '<div class="fila-btns" style="margin-top:10px"><button class="btn sec" id="dReparto">Reparto de habitaciones</button>' +
+        ((r.asignaciones || []).length ? '<button class="btn sec" id="dHojaHab">Hoja de habitaciones</button>' : '') + '</div>') : '') +
+      (!bloq && !canc ? apartado('estancia', 'Hoja de estancia', '', '<p class="sub" style="margin:0 0 10px">' + resumenServicios(r) + '</p>' +
+        '<div class="fila-btns"><button class="btn sec" id="dServ">Servicios y datos</button><button class="btn sec" id="dHoja">Ver hoja de estancia</button></div>') : '') +
+      // Bitácora
+      '<div class="tarjeta exp-bit"><h2>Bitácora</h2><ul class="bitacora">' + bitHtml + '</ul>' +
+      '<div class="fila-btns" style="margin-top:8px"><button class="btn sec" id="dNota">+ Añadir nota</button>' +
+      (bit.length > 5 ? '<button class="btn borde" id="dBitTodo">' + (verTodo ? 'Ver menos' : 'Ver todo (' + bit.length + ')') + '</button>' : '') + '</div></div>' +
+      // Acciones finales
+      '<details class="apartado peligro-ap"><summary><b>Cancelar o borrar</b><span></span></summary><div class="ap-cuerpo"><div class="fila-btns">' +
+      (!canc ? '<button class="btn peligro" id="dCancelar">Cancelar reserva</button>' : '') +
+      '<button class="btn peligro borde-p" id="dBorrar">Borrar</button></div></div></details>';
     enlazarVolver();
+    // Pasos
+    $$('.paso-acc').forEach(function (b) {
+      b.onclick = function () {
+        var p = pasos[+b.dataset.p], k = b.dataset.k;
+        if (k === 'acc') return p.acc.fn();
+        var m = k === 'marca' ? p.marca : p.marcas[+k.slice(1)];
+        anotar(r, m.tipo, '', 'Anotado en la bitácora');
+      };
+    });
+    if ($('#dSig')) $('#dSig').onclick = function () {
+      if (sig.acc && !sig.sigMarca) return sig.acc.fn();
+      if (sig.sigMarca) return anotar(r, sig.sigMarca, '', 'Anotado');
+      if (sig.marca) return anotar(r, sig.marca.tipo, '', 'Anotado');
+    };
     if ($('#dEditar')) $('#dEditar').onclick = function () { ir('editar/' + encodeURIComponent(r.id)); };
-    if ($('#dConfirmar')) $('#dConfirmar').onclick = function () { ir('editar/' + encodeURIComponent(r.id) + '?confirmar=1'); };
     if ($('#dServ')) $('#dServ').onclick = function () { ir('servicios/' + encodeURIComponent(r.id)); };
     if ($('#dHoja')) $('#dHoja').onclick = function () { ir('hoja/' + encodeURIComponent(r.id) + '?modo=presupuesto'); };
-    enlazarFormulario(r);
+    if (fTarjeta) enlazarFormulario(r);
     if ($('#dReparto')) $('#dReparto').onclick = function () { ir('reparto/' + encodeURIComponent(r.id)); };
     if ($('#dHojaHab')) $('#dHojaHab').onclick = function () { ir('habitaciones/' + encodeURIComponent(r.id)); };
+    if ($('#dBitTodo')) $('#dBitTodo').onclick = function () { S.bitTodo = verTodo ? null : r.id; pintarDetalle(r.id); };
+    $('#dNota').onclick = function () {
+      modal('<p><b>Añadir nota a la bitácora</b></p><textarea class="entrada" id="notaTxt" maxlength="300" rows="3" placeholder="Por ejemplo: llamé al responsable; confirmará el número el lunes."></textarea>' +
+        '<div class="fila-btns" style="margin-top:10px"><button class="btn borde" data-r="0">Volver</button><button class="btn" data-r="1">Guardar nota</button></div>', function (e, cerrar) {
+        var b = e.target.closest('[data-r]'); if (!b) return;
+        if (b.dataset.r === '0') return cerrar();
+        var t = $('#notaTxt').value.trim(); if (!t) return toast('Escribe la nota.', true);
+        cerrar(); anotar(r, 'nota', t, 'Nota guardada');
+      });
+      setTimeout(function () { var t = $('#notaTxt'); if (t) t.focus(); }, 50);
+    };
     function accion(nombre, texto, boton, ok) {
       return function () {
         if (S.sinConexion) return toast('Sin conexión: no se puede hacer ahora.', true);
@@ -624,7 +791,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     }
     if ($('#dCancelar')) $('#dCancelar').onclick = accion('cancelarReserva', '¿Cancelar la reserva de <b>' + esc(r.grupo) + '</b>? Se quitará del calendario y quedará marcada como cancelada en la lista de reservas.', 'Sí, cancelar', 'Reserva cancelada');
     $('#dBorrar').onclick = accion('borrarReserva', '¿<b>Borrar</b> definitivamente «' + esc(r.grupo) + '»? Desaparecerá de la app, de la lista de reservas y del calendario. <b>No se puede deshacer.</b>' +
-      (r.estado !== 'Cancelada' ? '<br><br>Si solo se ha anulado, mejor usa «Cancelar reserva» para que quede constancia.' : ''), 'Sí, borrar', 'Reserva borrada');
+      (!canc ? '<br><br>Si solo se ha anulado, mejor usa «Cancelar reserva» para que quede constancia.' : ''), 'Sí, borrar', 'Reserva borrada');
   }
 
   // ---------------- Formulario ----------------
@@ -1262,21 +1429,26 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     };
   }
   function compartirEnlace(r, enlace) {
+    // Cada forma de envío queda en la bitácora (sin esperar ni mostrar el reloj).
+    var apuntado = {};
+    function apuntar(t) { if (apuntado[t] || S.sinConexion) return; apuntado[t] = 1; usarDB(function () { return DB.anotar(r.id, t); }).catch(function () {}); }
     var texto = 'Hola. Para preparar vuestra estancia en la Casa de Espiritualidad María Madre (' + legible(r.entrada) + ' a ' + legible(r.salida) +
       '), por favor rellenad este formulario. Podéis corregirlo con el mismo enlace hasta el día de entrada:';
     modal('<p style="margin-bottom:6px"><b>Enlace del formulario</b></p><p class="sub" style="margin:0 0 10px">Envíalo al responsable del grupo. Solo sirve para esta reserva.</p>' +
       '<input class="entrada" id="feEnlace" readonly value="' + esc(enlace) + '" style="font-size:14px">' +
       '<div class="fila-btns" style="margin-top:10px">' + (navigator.share ? '<button class="btn" data-r="share">Compartir…</button>' : '') +
       '<button class="btn sec" data-r="copiar">Copiar</button></div>' +
-      '<div class="fila-btns" style="margin-top:8px"><a class="btn sec" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(texto + ' ' + enlace) + '">WhatsApp</a>' +
-      '<a class="btn sec" href="mailto:' + esc(r.email || '') + '?subject=' + encodeURIComponent('Formulario de su estancia · Casa María Madre') + '&body=' + encodeURIComponent(texto + '\n\n' + enlace) + '">Correo</a></div>' +
+      '<div class="fila-btns" style="margin-top:8px"><a class="btn sec" data-log="enlace_whatsapp" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(texto + ' ' + enlace) + '">WhatsApp</a>' +
+      '<a class="btn sec" data-log="enlace_correo" href="mailto:' + esc(r.email || '') + '?subject=' + encodeURIComponent('Formulario de su estancia · Casa María Madre') + '&body=' + encodeURIComponent(texto + '\n\n' + enlace) + '">Correo</a></div>' +
       '<div class="fila-btns" style="margin-top:8px"><button class="btn borde" data-r="0">Cerrar</button></div>',
       function (e, cerrar) {
+        var lg = e.target.closest('[data-log]'); if (lg) apuntar(lg.dataset.log);
         var b = e.target.closest('[data-r]'); if (!b) return;
         if (b.dataset.r === '0') { cerrar(); pintar(); return; }
-        if (b.dataset.r === 'share') { navigator.share({ title: 'Formulario · Casa María Madre', text: texto, url: enlace }).catch(function () {}); return; }
+        if (b.dataset.r === 'share') { navigator.share({ title: 'Formulario · Casa María Madre', text: texto, url: enlace }).then(function () { apuntar('enlace_compartido'); }).catch(function () {}); return; }
         if (b.dataset.r === 'copiar') {
           var i = $('#feEnlace'); i.select(); i.setSelectionRange(0, 9999);
+          apuntar('enlace_copiado');
           (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(enlace) : Promise.reject()).then(function () { toast('Enlace copiado'); })
             .catch(function () { try { document.execCommand('copy'); toast('Enlace copiado'); } catch (x) { toast('Mantén pulsado el enlace para copiarlo.', true); } });
         }
@@ -1522,7 +1694,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         if (S.sinConexion) return toast('Sin conexión.', true);
         var asign = lista.filter(function (a) { return a.personas > 0; }).map(function (a) { return { habitacion: a.habitacion, personas: a.personas, uso: a.uso, manual: a.manual, segun: segun }; });
         cargando(true);
-        usarDB(function () { return DB.guardarReserva(datosReserva(r), asign); })
+        usarDB(function () { return DB.guardarReserva(datosReserva(r), asign, 'reparto'); })
           .then(function () { toast('Reparto guardado'); ir('reserva/' + encodeURIComponent(r.id)); })
           .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
       };
@@ -1691,7 +1863,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   document.addEventListener('visibilitychange', function () {
     if (document.hidden || !S.clave || !S.datos || editando()) return;
     if (Date.now() - (S.ultimaCarga || 0) < 120000) return;
-    recargar();
+    recargar(true); // comprobación de fondo: sin reloj
   });
   avisoConexion();
 
