@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.7.3';
+  var VERSION = '1.8.0';
   var VERSION_FECHA = '20/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -107,7 +107,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
 
   /** Pantallas donde se escribe: aquí nunca se redibuja solo (para no perder lo escrito). */
-  function editando() { var v = ruta().vista; return v === 'nueva' || v === 'editar' || v === 'servicios' || v === 'admin'; }
+  function editando() { var v = ruta().vista; return v === 'nueva' || v === 'editar' || v === 'servicios' || v === 'admin' || v === 'reparto'; }
 
   /** Recarga datos. Si se está editando una reserva NO se redibuja (para no perder lo escrito). */
   function recargar(silencioso, forzar) {
@@ -174,7 +174,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
 
   // ---------------- Navegación ----------------
-  var TITULOS = { calendario: 'Calendario', reservas: 'Reservas', nueva: 'Nueva reserva', editar: 'Editar reserva', reserva: 'Reserva', ajustes: 'Ajustes', admin: 'Administración', servicios: 'Servicios y datos', hoja: 'Hoja de estancia', formulario: 'Formulario del grupo' };
+  var TITULOS = { calendario: 'Calendario', reservas: 'Reservas', nueva: 'Nueva reserva', editar: 'Editar reserva', reserva: 'Reserva', ajustes: 'Ajustes', admin: 'Administración', servicios: 'Servicios y datos', hoja: 'Hoja de estancia', formulario: 'Formulario del grupo', reparto: 'Reparto de habitaciones', habitaciones: 'Hoja de habitaciones' };
   function ruta() {
     var h = location.hash.replace(/^#\/?/, '');
     var q = {}, partes = h.split('?');
@@ -197,7 +197,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     $('#tituloVista').textContent = TITULOS[r.vista] || '';
     document.body.setAttribute('data-vista', r.vista);
     $$('.menu button').forEach(function (b) {
-      b.classList.toggle('activo', b.dataset.ir === r.vista || (b.dataset.ir === 'reservas' && (r.vista === 'reserva' || r.vista === 'servicios' || r.vista === 'hoja' || r.vista === 'formulario')) || (b.dataset.ir === 'ajustes' && r.vista === 'admin'));
+      b.classList.toggle('activo', b.dataset.ir === r.vista || (b.dataset.ir === 'reservas' && (r.vista === 'reserva' || r.vista === 'servicios' || r.vista === 'hoja' || r.vista === 'formulario' || r.vista === 'reparto' || r.vista === 'habitaciones')) || (b.dataset.ir === 'ajustes' && r.vista === 'admin'));
     });
     vista.scrollTop = 0; window.scrollTo(0, 0);
     switch (r.vista) {
@@ -210,6 +210,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       case 'servicios': return pintarServicios(r.id);
       case 'hoja': return pintarHoja(r.id, r.q.modo);
       case 'formulario': return pintarFormularioRecibido(r.id);
+      case 'reparto': return pintarReparto(r.id);
+      case 'habitaciones': return pintarHojaHab(r.id);
       default: return pintarCalendario();
     }
   }
@@ -586,7 +588,9 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       (tipo(r) === 'Alojamiento' ? '<div class="kpis"><div class="kpi"><b>' + (r.personas || 0) + '</b><span>personas</span></div>' +
         '<div class="kpi"><b>' + pernoctan(r) + '</b><span>pernoctan</span></div>' +
         '<div class="kpi"><b>' + (cap ? Math.round(pernoctan(r) * 100 / cap) : 0) + '%</b><span>de ' + cap + ' plazas</span></div></div>' +
-        '<div class="tarjeta"><h2>Habitaciones</h2>' + plano(r.asignaciones) + '</div>' : '') +
+        '<div class="tarjeta"><h2>Habitaciones</h2>' + avisoReparto(r) + plano(r.asignaciones) +
+        (r.estado !== 'Cancelada' ? '<div class="fila-btns" style="margin-top:10px"><button class="btn sec" id="dReparto">Reparto de habitaciones</button>' +
+          ((r.asignaciones || []).length ? '<button class="btn sec" id="dHojaHab">Hoja de habitaciones</button>' : '') + '</div>' : '') + '</div>' : '') +
       (!bloq && r.estado !== 'Cancelada' ? '<div class="tarjeta"><h2>Hoja de estancia</h2><p class="sub" style="margin:-4px 0 10px">' + resumenServicios(r) + '</p>' +
         '<div class="fila-btns"><button class="btn sec" id="dServ">Servicios y datos</button><button class="btn sec" id="dHoja">Ver hoja de estancia</button></div></div>' : '') +
       (!bloq && r.estado !== 'Cancelada' ? tarjetaFormulario(r) : '') +
@@ -605,6 +609,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if ($('#dServ')) $('#dServ').onclick = function () { ir('servicios/' + encodeURIComponent(r.id)); };
     if ($('#dHoja')) $('#dHoja').onclick = function () { ir('hoja/' + encodeURIComponent(r.id) + '?modo=presupuesto'); };
     enlazarFormulario(r);
+    if ($('#dReparto')) $('#dReparto').onclick = function () { ir('reparto/' + encodeURIComponent(r.id)); };
+    if ($('#dHojaHab')) $('#dHojaHab').onclick = function () { ir('habitaciones/' + encodeURIComponent(r.id)); };
     function accion(nombre, texto, boton, ok) {
       return function () {
         if (S.sinConexion) return toast('Sin conexión: no se puede hacer ahora.', true);
@@ -668,7 +674,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       '</div>' +
       '<div class="tarjeta" id="fHabsBloque"><h2>Habitaciones</h2><p class="sub" style="margin-top:-6px">Personas que pernoctan en cada habitación.</p>' +
       '<div class="fila-btns" style="margin-bottom:6px"><button type="button" class="btn sec" id="fAuto">Repartir automáticamente</button><button type="button" class="btn borde" id="fVaciar">Vaciar</button></div>' +
-      '<h3>Fila superior</h3><div class="lista-hab" id="fHabsSup"></div><h3>Fila inferior</h3><div class="lista-hab" id="fHabsInf"></div></div>' +
+      '<div class="lista-hab" id="fHabs"></div></div>' +
       '<div class="form-espacio"></div>' +
       '<div class="pie-form"><div class="total" id="fTotal"></div><button class="btn" id="fGuardar">Guardar</button></div></div>';
 
@@ -712,8 +718,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     function pintaHabs() {
       var oc = ocupadas();
       Object.keys(oc).forEach(function (k) { delete asig[k]; });
-      $('#fHabsSup').innerHTML = habs.filter(function (h) { return /superior/i.test(h.ubicacion); }).map(function (h) { return filaHab(h, oc); }).join('');
-      $('#fHabsInf').innerHTML = habs.filter(function (h) { return !/superior/i.test(h.ubicacion); }).map(function (h) { return filaHab(h, oc); }).join('');
+      $('#fHabs').innerHTML = habs.map(function (h) { return filaHab(h, oc); }).join('');
       pintaTotal();
     }
     function total() { return Object.keys(asig).reduce(function (s, k) { return s + (asig[k] || 0); }, 0); }
@@ -730,7 +735,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       var el = vista.querySelector('.item[data-n="' + n + '"]'); if (el) el.outerHTML = filaHab(h, ocupadas());
       pintaTotal(); guardarBorrador();
     }
-    $('#fHabsSup').onclick = alPulsar; $('#fHabsInf').onclick = alPulsar;
+    $('#fHabs').onclick = alPulsar;
     $('#fVaciar').onclick = function () { asig = {}; pintaHabs(); guardarBorrador(); };
     $('#fAuto').onclick = function () {
       modal('<p><b>Repartir automáticamente</b><br><span class="sub">Rellena las habitaciones libres por orden.</span></p>' +
@@ -1308,7 +1313,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       (r.servicios && r.servicios.length ? '<p class="sub" style="margin:8px 0 0;font-size:13px">Al aplicar se sustituyen los servicios que tiene ahora la reserva.</p>' : '') + '</div>' +
       (tipo(r) === 'Alojamiento' ? '<div class="tarjeta"><h2>Habitaciones (preferencias)</h2>' +
         fila('Matrimonios', h.matrimonios) + fila('Comparten', h.comparten) + fila('Individuales', h.individual) + fila('Jóvenes en literas', h.literas) +
-        fila('Movilidad reducida', h.movilidad) + (h.observaciones ? fila('Observaciones', h.observaciones) : '') +
+        (h.movilidad ? fila('Movilidad reducida (se reparte como «comparten»)', h.movilidad) : '') + (h.observaciones ? fila('Observaciones', h.observaciones) : '') +
         '<p class="sub" style="margin:8px 0 0;font-size:13px">Se guardan para el reparto de habitaciones (no cambian las habitaciones asignadas).</p></div>' : '') +
       '<div class="tarjeta"><h2>Alergias</h2>' + ((d.alergias || []).length ? d.alergias.map(function (a) {
         return '<div class="dato"><span>Persona ' + esc(a.persona) + '</span><span>' + esc(a.alergenos.concat(a.otras ? [a.otras] : []).join(', ')) + '</span></div>';
@@ -1333,6 +1338,252 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         usarDB(function () { return DB.aplicarFormulario(r.id); }).then(function () { toast('Formulario aplicado a la reserva'); ir('reserva/' + encodeURIComponent(r.id)); })
           .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
       });
+    };
+  }
+
+  // ---------------- 1.8.0 · Reparto de habitaciones ----------------
+  var USOS = ['Matrimonio', 'Compartida', 'Individual', 'Jóvenes', 'Otro'];
+  function esLiteras(h) { return /litera/i.test(h.camas || '') || /cu[aá]druple|qu[ií]ntuple/i.test(h.tipo || ''); }
+  /** Lo que pidió el grupo en su formulario (personas por tipo de uso), o null. */
+  function pideGrupo(r) {
+    var d = r.formulario && r.formulario.datos, h = d && d.habitaciones;
+    if (!h || !(h.matrimonios || h.comparten || h.individual || h.literas || h.movilidad)) return null;
+    return { Matrimonio: (h.matrimonios || 0) * 2, Compartida: (h.comparten || 0) + (h.movilidad || 0), Individual: h.individual || 0, 'Jóvenes': h.literas || 0 };
+  }
+  /** Habitaciones ocupadas por otras reservas en las fechas de r: { nº: grupo } */
+  function ocupadasPorOtras(r) {
+    var oc = {};
+    activas().forEach(function (x) {
+      if (x.id === r.id) return;
+      if (momento(r.entrada, r.horaEntrada) < momento(x.salida, x.horaSalida) && momento(r.salida, r.horaSalida) > momento(x.entrada, x.horaEntrada))
+        (x.asignaciones || []).forEach(function (a) { oc[a.habitacion] = x.grupo; });
+    });
+    return oc;
+  }
+  /** Fecha del formulario en que se basa el reparto guardado ('' si no se basa en ninguno). */
+  function repartoSegun(r) { return (r.asignaciones || []).reduce(function (m, a) { return a.segun && a.segun > m ? a.segun : m; }, ''); }
+  function avisoReparto(r) {
+    var f = r.formulario, hay = (r.asignaciones || []).length;
+    if (!f || !f.datos || !pideGrupo(r) || r.estado === 'Cancelada') return '';
+    var seg = repartoSegun(r);
+    if (!hay) return '<div class="aviso-suave">El grupo indicó cómo quiere repartirse. Pulse «Reparto de habitaciones» para ver la propuesta.</div>';
+    if (seg && f.enviadoEl > seg) return '<div class="aviso-suave">El grupo volvió a enviar su formulario el ' + marcaCorta(f.enviadoEl) + '. Revise el reparto («Volver a proponer»).</div>';
+    return '';
+  }
+
+  /**
+   * Propone un reparto: matrimonios en dobles, compartidas de dos en dos, individuales de una en una y jóvenes en literas.
+   * Busca habitaciones seguidas (números consecutivos) para que el grupo quede junto. «fijas» son las cambiadas a mano: no se tocan.
+   */
+  function proponerReparto(r, pide, fijas) {
+    var oc = ocupadasPorOtras(r), usadas = {};
+    fijas.forEach(function (a) { usadas[a.habitacion] = true; });
+    var libres = habitaciones().filter(function (h) { return h.estado === 'Disponible' && !oc[h.numero] && !usadas[h.numero]; })
+      .sort(function (a, b) { return a.numero - b.numero; });
+    // Lo que falta por repartir (se descuenta lo que ya está fijado a mano)
+    var falta = {};
+    Object.keys(pide).forEach(function (u) { falta[u] = pide[u]; });
+    fijas.forEach(function (a) { if (falta[a.uso] != null) falta[a.uso] = Math.max(0, falta[a.uso] - a.personas); });
+    var out = [];
+    // Jóvenes: primero las habitaciones de literas
+    var jov = falta['Jóvenes'] || 0;
+    libres.filter(esLiteras).sort(function (a, b) { return a.capacidad - b.capacidad || a.numero - b.numero; }).forEach(function (h) {
+      if (jov <= 0) return;
+      var p = Math.min(h.capacidad, jov); out.push({ habitacion: h.numero, personas: p, uso: 'Jóvenes', manual: false }); jov -= p; usadas[h.numero] = true;
+    });
+    // Unidades para el resto de habitaciones
+    var uds = [];
+    for (var i = 0; i < Math.floor((falta.Matrimonio || 0) / 2); i++) uds.push({ p: 2, uso: 'Matrimonio', orden: 0 });
+    var comp = falta.Compartida || 0;
+    for (i = 0; i < Math.floor(comp / 2); i++) uds.push({ p: 2, uso: 'Compartida', orden: 1 });
+    for (i = 0; i < Math.floor(jov / 2); i++) uds.push({ p: 2, uso: 'Jóvenes', orden: 2 });
+    for (i = 0; i < (falta.Individual || 0); i++) uds.push({ p: 1, uso: 'Individual', orden: 3 });
+    if (comp % 2) uds.push({ p: 1, uso: 'Compartida', orden: 4 });
+    if (jov % 2) uds.push({ p: 1, uso: 'Jóvenes', orden: 5 });
+    var pool = libres.filter(function (h) { return !usadas[h.numero] && !esLiteras(h); });
+    pool = pool.concat(libres.filter(function (h) { return !usadas[h.numero] && esLiteras(h); })); // literas libres, al final
+    pool.sort(function (a, b) { return a.numero - b.numero; });
+    var k = Math.min(uds.length, pool.length), mejor = null;
+    // Ventana de k habitaciones seguidas con menos distancia entre la primera y la última (y en la misma fila si se puede)
+    for (var s = 0; s + k <= pool.length && k; s++) {
+      var v = pool.slice(s, s + k);
+      var filas = {}; v.forEach(function (h) { filas[/superior/i.test(h.ubicacion) ? 'S' : 'I'] = 1; });
+      var lit = v.filter(esLiteras).length;
+      var nota = (v[k - 1].numero - v[0].numero) * 10 + (Object.keys(filas).length - 1) * 5 + lit * 3 +
+        v.reduce(function (t, h) { return t + h.capacidad; }, 0) * 0.1;
+      if (!mejor || nota < mejor.nota) mejor = { nota: nota, v: v };
+    }
+    if (mejor) {
+      var hs = mejor.v.slice().sort(function (a, b) { return a.capacidad - b.capacidad || a.numero - b.numero; });
+      uds.sort(function (a, b) { return a.orden - b.orden; }).slice(0, k).forEach(function (u, j) {
+        out.push({ habitacion: hs[j].numero, personas: u.p, uso: u.uso, manual: false });
+      });
+    }
+    var puestas = out.reduce(function (t, a) { return t + a.personas; }, 0);
+    var pedidas = Object.keys(falta).reduce(function (t, u) { return t + falta[u]; }, 0);
+    return { lista: out, faltan: Math.max(0, pedidas - puestas) };
+  }
+
+  function datosReserva(r) {
+    return { id: r.id, tipo: tipo(r), grupo: r.grupo, responsable: r.responsable || '', telefono: r.telefono || '', email: r.email || '',
+      entrada: r.entrada, horaEntrada: r.horaEntrada, salida: r.salida, horaSalida: r.horaSalida, estado: r.estado,
+      observaciones: r.observaciones || '', personas: r.personas || '' };
+  }
+
+  function pintarReparto(id) {
+    var r = reserva(id);
+    if (!r || tipo(r) !== 'Alojamiento') { vista.innerHTML = botonVolver() + '<div class="vacio">Esta reserva no tiene alojamiento.</div>'; enlazarVolver(); return; }
+    var pide = pideGrupo(r), f = r.formulario;
+    var lista = (r.asignaciones || []).map(function (a) { return { habitacion: a.habitacion, personas: a.personas, uso: a.uso || '', manual: !!a.manual, segun: a.segun || '' }; });
+    var segun = repartoSegun(r), cambiado = false, aviso = '';
+    function base() {
+      // Sin formulario: todas las personas como «Compartida»
+      if (pide) return pide;
+      var n = (r.personas || 0) - ((r.servicios || []).reduce(function (m, x) { return Math.max(m, x.bebes || 0); }, 0));
+      return { Matrimonio: 0, Compartida: Math.max(0, n), Individual: 0, 'Jóvenes': 0 };
+    }
+    function proponer() {
+      var fijas = lista.filter(function (a) { return a.manual && a.personas > 0; });
+      var p = proponerReparto(r, base(), fijas);
+      segun = f && f.enviadoEl ? f.enviadoEl : '';
+      lista = fijas.concat(p.lista);
+      cambiado = true;
+      aviso = p.faltan ? '<div class="aviso-suave" style="border-color:#B42318">No hay sitio para todos: faltan <b>' + p.faltan + '</b> personas por colocar en esas fechas. Revise otras reservas o añada habitaciones a mano.</div>' :
+        '<div class="aviso-ok">' + (pide ? 'La app ha propuesto este reparto según el formulario del grupo' + (f && f.enviadoEl ? ' (' + marcaCorta(f.enviadoEl) + ')' : '') : 'La app ha propuesto este reparto con las personas de la reserva') +
+        '. Puede cambiarlo y pulsar «Guardar reparto».</div>';
+    }
+    if (!lista.length) proponer();
+    else if (f && f.enviadoEl && segun && f.enviadoEl > segun) aviso = '<div class="aviso-suave">El grupo volvió a enviar su formulario el ' + marcaCorta(f.enviadoEl) + '. Pulse «Volver a proponer» para rehacer el reparto (lo cambiado a mano se mantiene).</div>';
+
+    function resumen() {
+      var asig = {}, nh = {};
+      lista.forEach(function (a) { if (!a.personas) return; var u = a.uso || 'Otro'; asig[u] = (asig[u] || 0) + a.personas; nh[u] = (nh[u] || 0) + 1; });
+      var b = base(), filas = '', tp = 0, ta = 0, th = 0;
+      var nombres = { Matrimonio: 'Matrimonios', Compartida: 'Comparten habitación', Individual: 'Individuales', 'Jóvenes': 'Jóvenes en literas', Otro: 'Otro / sin uso' };
+      USOS.forEach(function (u) {
+        var p = b[u] || 0, a = asig[u] || 0, h = nh[u] || 0;
+        if (!p && !a) return;
+        tp += p; ta += a; th += h;
+        filas += '<span>' + nombres[u] + '</span><span class="r">' + (p || '—') + '</span><span class="r ' + (a === p ? 'ok' : 'mal') + '">' + (a === p ? '✓ ' : '') + a + ' en ' + h + ' hab.</span>';
+      });
+      return '<div class="tarjeta rep-res"><div class="rep-grid"><b>' + (pide ? 'Pide el grupo' : 'Personas') + '</b><b class="r">Pax</b><b class="r">Asignado</b>' + filas +
+        '<b>Total</b><b class="r">' + tp + '</b><b class="r">' + ta + ' en ' + th + ' hab.</b></div></div>';
+    }
+    function filaRep(a, i) {
+      var h = hab(a.habitacion) || { tipo: '', capacidad: 0 };
+      return '<div class="rep-fila" data-i="' + i + '"><div class="rep-nom"><b>Hab. ' + a.habitacion + '</b> <small>' + esc(h.tipo) + ' · ' + h.capacidad + ' plazas</small>' +
+        (a.manual ? ' <span class="tag-man">cambiada a mano</span>' : '') +
+        '<select class="entrada rep-uso" aria-label="Uso de la habitación ' + a.habitacion + '">' +
+        ['<option value=""' + (!a.uso ? ' selected' : '') + '>Sin indicar</option>'].concat(USOS.map(function (u) { return '<option' + (a.uso === u ? ' selected' : '') + '>' + u + '</option>'; })).join('') +
+        '</select></div>' +
+        '<div class="paso"><button type="button" data-d="-1" aria-label="Quitar una persona"' + (a.personas <= 0 ? ' disabled' : '') + '>−</button>' +
+        '<output>' + a.personas + '/' + h.capacidad + '</output>' +
+        '<button type="button" data-d="1" aria-label="Añadir una persona"' + (a.personas >= h.capacidad ? ' disabled' : '') + '>+</button></div></div>';
+    }
+    function pinta() {
+      lista.sort(function (a, b) { return a.habitacion - b.habitacion; });
+      var tot = lista.reduce(function (t, a) { return t + a.personas; }, 0);
+      vista.innerHTML = botonVolver() +
+        '<div class="tarjeta"><h2>' + esc(r.grupo) + '</h2><p class="sub" style="margin:-6px 0 0">' + esc(legible(r.entrada)) + ' → ' + esc(legible(r.salida)) + ' · ' + noches(r) + ' noches</p></div>' +
+        aviso + resumen() +
+        '<div class="tarjeta"><h2>Habitaciones</h2>' + (lista.length ? lista.map(filaRep).join('') : '<p class="sub">Sin habitaciones.</p>') +
+        '<div class="fila-btns" style="margin-top:10px"><button type="button" class="btn sec" id="rAnadir">+ Añadir habitación</button><button type="button" class="btn sec" id="rProponer">Volver a proponer</button></div>' +
+        '<p class="sub" style="margin:10px 0 0;font-size:13px">Lo que cambie a mano queda marcado y no se toca al volver a proponer. Las habitaciones con 0 personas se quitan al guardar.</p></div>' +
+        '<div class="form-espacio"></div><div class="pie-form"><div class="total"><b>' + tot + '</b> pernoctan · ' + lista.filter(function (a) { return a.personas; }).length + ' hab.</div>' +
+        '<button class="btn" id="rGuardar">Guardar reparto</button></div>';
+      enlazarVolver();
+      $$('.rep-fila').forEach(function (el) {
+        var a = lista[+el.dataset.i];
+        el.querySelector('select').onchange = function () { a.uso = this.value; a.manual = true; cambiado = true; pinta(); };
+        el.querySelector('.paso').onclick = function (e) {
+          var b = e.target.closest('button[data-d]'); if (!b) return;
+          var h = hab(a.habitacion); a.personas = Math.max(0, Math.min(h.capacidad, a.personas + Number(b.dataset.d))); a.manual = true; cambiado = true; pinta();
+        };
+      });
+      $('#rProponer').onclick = function () {
+        var hay = lista.some(function (a) { return a.manual; });
+        confirmar('Se rehará el reparto' + (pide ? ' según el formulario del grupo' : '') + '.' + (hay ? ' Las habitaciones cambiadas a mano se mantienen.' : ''), 'Volver a proponer')
+          .then(function (ok) { if (ok) { proponer(); pinta(); } });
+      };
+      $('#rAnadir').onclick = function () {
+        var oc = ocupadasPorOtras(r), ya = {}; lista.forEach(function (a) { ya[a.habitacion] = 1; });
+        var libres = habitaciones().slice().sort(function (a, b) { return a.numero - b.numero; })
+          .filter(function (h) { return h.estado === 'Disponible' && !oc[h.numero] && !ya[h.numero]; });
+        if (!libres.length) return toast('No quedan habitaciones libres en esas fechas.', true);
+        modal('<p><b>Añadir habitación</b><br><span class="sub">Libres en esas fechas</span></p><div class="rep-libres">' +
+          libres.map(function (h) { return '<button type="button" class="chip" data-n="' + h.numero + '"><b>' + h.numero + '</b> <small>' + esc(h.tipo) + '</small></button>'; }).join('') +
+          '</div><div class="fila-btns" style="margin-top:10px"><button class="btn borde" data-r="0">Volver</button></div>', function (e, cerrar) {
+          var b = e.target.closest('[data-n]');
+          if (b) { lista.push({ habitacion: +b.dataset.n, personas: 1, uso: 'Otro', manual: true, segun: '' }); cambiado = true; cerrar(); pinta(); return; }
+          if (e.target.closest('[data-r]')) cerrar();
+        });
+      };
+      $('#rGuardar').onclick = function () {
+        if (S.sinConexion) return toast('Sin conexión.', true);
+        var asign = lista.filter(function (a) { return a.personas > 0; }).map(function (a) { return { habitacion: a.habitacion, personas: a.personas, uso: a.uso, manual: a.manual, segun: segun }; });
+        cargando(true);
+        usarDB(function () { return DB.guardarReserva(datosReserva(r), asign); })
+          .then(function () { toast('Reparto guardado'); ir('reserva/' + encodeURIComponent(r.id)); })
+          .catch(function (e) { toast(e.message, true); }).then(function () { cargando(false); });
+      };
+    }
+    pinta();
+  }
+
+  // ---------------- 1.8.0 · Hoja de habitaciones (uso interno) ----------------
+  function consumosHab(p, n) {
+    var cam = Math.max(1, cfgNum('consumo.cambio_cama') || 7), toa = Math.max(1, cfgNum('consumo.cambio_toallas') || 3);
+    var juegosCama = n > 0 ? 1 + Math.floor((n - 1) / cam) : 1, juegosToalla = n > 0 ? 1 + Math.floor((n - 1) / toa) : 1;
+    return {
+      cama: p * (cfgNum('consumo.persona.cama') || 0) * juegosCama,
+      tg: p * (cfgNum('consumo.persona.toalla_grande') || 0) * juegosToalla,
+      tp: p * (cfgNum('consumo.persona.toalla_pequena') || 0) * juegosToalla,
+      rollos: cfgNum('consumo.hab.rollos') || 0,
+      gel: cfgNum('consumo.hab.gel') || 0
+    };
+  }
+  function htmlHojaHab(r) {
+    var n = noches(r), lista = (r.asignaciones || []).slice().sort(function (a, b) { return a.habitacion - b.habitacion; });
+    var T = { p: 0, cama: 0, tg: 0, tp: 0, rollos: 0, gel: 0 };
+    var filas = lista.map(function (a) {
+      var h = hab(a.habitacion) || {}, c = consumosHab(a.personas, n);
+      T.p += a.personas; T.cama += c.cama; T.tg += c.tg; T.tp += c.tp; T.rollos += c.rollos; T.gel += c.gel;
+      return '<tr><td class="l"><b>' + a.habitacion + '</b></td><td class="l">' + esc(h.tipo || '') + '</td><td class="l">' + esc(a.uso || '—') + '</td><td>' + a.personas + '</td>' +
+        '<td>' + c.cama + '</td><td>' + c.tg + '</td><td>' + c.tp + '</td><td>' + c.rollos + '</td><td>' + c.gel + '</td></tr>';
+    }).join('');
+    var bebes = (r.servicios || []).reduce(function (m, x) { return Math.max(m, x.bebes || 0); }, 0);
+    var cam = cfgNum('consumo.cambio_cama') || 7, toa = cfgNum('consumo.cambio_toallas') || 3;
+    return '<div class="hoja-doc">' +
+      '<div class="hd-cab"><div><div class="hd-casa">' + esc(cfg('casa.nombre') || 'Casa de Espiritualidad María Madre') + '</div>' +
+      '<div class="hd-dir">Uso interno · no se entrega al grupo</div></div>' +
+      '<div class="hd-tit"><div>Hoja de habitaciones</div><small>Ref. ' + esc(r.id) + ' · ' + legible(hoyTxt()) + '</small></div></div>' +
+      '<div class="hd-datos">' +
+      '<div><small>GRUPO</small><b>' + esc(r.grupo) + '</b></div>' +
+      '<div><small>RESPONSABLE</small>' + esc(r.responsable || '—') + (r.telefono ? ' · ' + esc(r.telefono) : '') + '</div>' +
+      '<div><small>ENTRADA</small>' + esc(diaSemana(r.entrada)) + ', ' + esc(r.horaEntrada) + '</div>' +
+      '<div><small>SALIDA</small>' + esc(diaSemana(r.salida)) + ', ' + esc(r.horaSalida) + '</div>' +
+      '<div><small>PERNOCTAN</small>' + T.p + ' personas en ' + lista.length + ' habitaciones · ' + n + ' noches</div>' +
+      '<div><small>NIÑOS DE 0 A ' + (cfg('edad.gratis_hasta') || 4) + '</small>' + (bebes ? bebes + ' (no ocupan cama; consultar si necesitan algo)' : 'ninguno') + '</div></div>' +
+      '<h4>Plano</h4>' + plano(r.asignaciones) +
+      '<h4>Preparación por habitación</h4><table class="hd-tabla"><tr><th class="l">Hab.</th><th class="l">Tipo</th><th class="l">Uso</th><th>Pax</th><th>Juegos cama</th><th>Toallas grandes</th><th>Toallas pequeñas</th><th>Papel</th><th>Gel</th></tr>' +
+      (filas || '<tr><td class="l" colspan="9">Sin habitaciones asignadas.</td></tr>') +
+      '<tr class="hd-total"><td class="l" colspan="3"><b>Total</b></td><td><b>' + T.p + '</b></td><td><b>' + T.cama + '</b></td><td><b>' + T.tg + '</b></td><td><b>' + T.tp + '</b></td><td><b>' + T.rollos + '</b></td><td><b>' + T.gel + '</b></td></tr></table>' +
+      '<div class="hd-pie">Ropa de cama: un juego por persona' + (n > cam ? ', con cambio cada ' + cam + ' noches (incluido en la cuenta)' : '') +
+      '. Toallas: ' + (n > toa ? 'cambio cada ' + toa + ' noches (incluido en la cuenta)' : 'un juego por persona') + '. Reglas en Administración › Consumos.</div>' +
+      '</div>';
+  }
+  function pintarHojaHab(id) {
+    var r = reserva(id);
+    if (!r) { vista.innerHTML = botonVolver() + '<div class="vacio">La reserva no existe.</div>'; enlazarVolver(); return; }
+    vista.innerHTML = botonVolver() +
+      '<div class="hoja-barra"><div class="fila-btns"><button class="btn sec" id="hhRep">Cambiar reparto</button><button class="btn" id="hhPdf">Imprimir / PDF</button></div></div>' +
+      '<div class="hoja-marco">' + htmlHojaHab(r) + '</div>';
+    enlazarVolver();
+    $('#hhRep').onclick = function () { ir('reparto/' + encodeURIComponent(r.id)); };
+    $('#hhPdf').onclick = function () {
+      var t = document.title; document.title = 'Habitaciones · ' + r.grupo;
+      document.body.classList.add('imprimiendo-hoja'); window.print();
+      setTimeout(function () { document.body.classList.remove('imprimiendo-hoja'); document.title = t; }, 800);
     };
   }
 

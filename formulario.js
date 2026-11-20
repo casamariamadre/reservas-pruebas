@@ -57,6 +57,7 @@
     var r = INFO.reserva, e = INFO.enviado, g = r.grupoDatos || {};
     if (e) { F = JSON.parse(JSON.stringify(e)); F.servMap = {}; (e.servicios || []).forEach(function (x) { F.servMap[x.fecha + '|' + x.servicio] = x.total; }); F.salaSet = {}; (e.salas || []).forEach(function (x) { F.salaSet[x.fecha + '|' + x.sala] = true; }); F.hayAlergias = (e.alergias || []).length > 0; F.alergias = F.alergias || [];
       F.habitaciones = Object.assign({ matrimonios: 0, comparten: 0, individual: 0, literas: 0, movilidad: 0, observaciones: '' }, F.habitaciones || {});
+      if (F.habitaciones.movilidad) { F.habitaciones.comparten += F.habitaciones.movilidad; F.habitaciones.movilidad = 0; }
       F.consentimientos = F.consentimientos || { datos: false, imagenes: false, autorizacion: false }; return; }
     F = {
       contacto: { telefono: r.telefono || '', email: r.email || '' },
@@ -156,15 +157,14 @@
       '<div class="card">' + stepper('matrimonios', h.matrimonios, 'Matrimonios', 'Una habitación doble por pareja') +
       stepper('comparten', h.comparten, 'Personas que comparten habitación', 'De dos en dos') +
       stepper('individual', h.individual, 'Personas en habitación individual', 'Según disponibilidad') +
-      stepper('literas', h.literas, 'Jóvenes en literas', 'Habitaciones de 4') +
-      stepper('movilidad', h.movilidad, 'Personas con movilidad reducida', 'Cerca del ascensor') + '</div>' +
+      stepper('literas', h.literas, 'Jóvenes en literas', 'Habitaciones de 4') + '</div>' +
       '<div id="reparto">' + htmlReparto() + '</div>' +
       '<div class="card"><label class="f" for="hObs" style="margin-top:0">Observaciones (opcional)</label>' +
       (F.personas.bebes ? '<div class="hint" style="margin-bottom:6px">' + AVISO_BEBES + '</div>' : '') +
       '<textarea id="hObs" maxlength="300">' + esc(h.observaciones || '') + '</textarea></div>';
   }
   function htmlReparto() {
-    var h = F.habitaciones, n = h.matrimonios * 2 + h.comparten + h.individual + h.literas + h.movilidad, t = personasCama();
+    var h = F.habitaciones, n = h.matrimonios * 2 + h.comparten + h.individual + h.literas, t = personasCama();
     return (n === t ? '<div class="ok-box">✓ ' + n + ' de ' + t + ' personas repartidas</div>' :
       '<div class="av-box">' + n + ' de ' + t + ' personas repartidas' + (n > t ? ' (sobran ' + (n - t) + ')' : ' (faltan ' + (t - n) + ')') + '. Puede enviarlo igualmente; la Casa lo revisará.</div>') +
       (F.personas.bebes ? '<div class="hint" style="margin-top:6px">Los niños de 0 a ' + (aj('edad.gratis_hasta') || 4) + ' años no se cuentan aquí.</div>' : '');
@@ -192,7 +192,7 @@
     var salas = {}; Object.keys(F.salaSet).forEach(function (k) { if (!F.salaSet[k]) return; var x = k.split('|'); (salas[x[1]] = salas[x[1]] || []).push(corto(x[0])); });
     var h = F.habitaciones, hab = [];
     if (h.matrimonios) hab.push(h.matrimonios + ' matrimonios'); if (h.comparten) hab.push(h.comparten + ' comparten'); if (h.individual) hab.push(h.individual + ' individuales');
-    if (h.literas) hab.push(h.literas + ' en literas'); if (h.movilidad) hab.push(h.movilidad + ' movilidad reducida');
+    if (h.literas) hab.push(h.literas + ' en literas');
     var al = F.hayAlergias ? F.alergias.filter(function (a) { return a.alergenos.length || a.otras; }) : [];
     var euros = c.total.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2, useGrouping: 'always' }) + ' €';
     var cs = F.consentimientos, TX = INFO.textos || {};

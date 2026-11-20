@@ -563,3 +563,19 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 
 .txt-acep p { margin: 8px 0 0; line-height: 1.45; }
 .cambios-res { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: #FFF4D6; color: #6B4A10; font-size: 13.5px; font-weight: 700; }
 .sub.cambio { color: #9A5B00; }
+/* v1.8.0: reparto y hoja de habitaciones */
+.aviso-ok { background: #E8F2EA; color: #1F4D30; border: 1px solid #9CC5A8; border-radius: 10px; padding: 10px 12px; font-size: 14px; margin: 8px 0 12px; }
+.rep-grid { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 12px; font-size: 14px; line-height: 1.5; }
+.rep-grid .r { text-align: right; }
+.rep-grid .ok { color: var(--ok); font-weight: 700; }
+.rep-grid .mal { color: #B42318; font-weight: 700; }
+.rep-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--linea); }
+.rep-fila:last-of-type { border-bottom: 0; }
+.rep-nom { min-width: 0; }
+.rep-nom small { color: var(--texto-2); }
+.rep-nom select { margin-top: 6px; min-height: 40px; padding: 6px 8px; max-width: 190px; }
+.tag-man { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: #FFF1D6; color: #7A4B00; }
+.rep-libres { display: flex; flex-wrap: wrap; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.rep-libres .chip small { color: var(--texto-2); font-weight: 400; }
+.hd-tabla tr.hd-total td { border-top: 2px solid #85200C; border-bottom: 0; }
+.hoja-doc .plano { margin: 6px 0 4px; }
