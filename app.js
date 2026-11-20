@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '2.0.0';
+  var VERSION = '2.0.1';
   var VERSION_FECHA = '20/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };

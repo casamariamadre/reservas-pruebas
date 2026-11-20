@@ -35,7 +35,7 @@
   function htmlDoc(doc, datos, firma, imagenes) {
     var c = doc.consentimiento || {};
     var cuerpo = (doc.bloques || []).map(function (b) {
-      var x = esc(b.x).replace(/\{(representante|dni|cargo)\}/g, function (m, k) {
+      var x = esc(b.x).replace(/\{(representante|dni|cargo|domicilio|cif_cliente)\}/g, function (m, k) {
         var v = datos[k]; return '<span class="hueco" data-h="' + k + '">' + (v ? esc(v) : '________') + '</span>';
       });
       return b.t === 'h' ? '<h3 class="ct-h">' + x + '</h3>' : b.t === 'c' ? '<h4 class="ct-c">' + x + '</h4>' : b.t === 'd' ? '<p class="ct-d">' + x + '</p>' : '<p>' + x + '</p>';
@@ -61,7 +61,9 @@
       '<div class="card"><div class="card-tit pri">Sus datos</div>' +
       '<label class="f" for="fNom">Nombre y apellidos</label><input id="fNom" type="text" autocomplete="name" value="' + esc(p.representante) + '">' +
       '<label class="f" for="fDni">DNI</label><input id="fDni" type="text" autocomplete="off" value="' + esc(p.dni) + '">' +
-      '<label class="f" for="fCar">En calidad de (cargo)</label><input id="fCar" type="text" autocomplete="off" placeholder="Por ejemplo: presidente, responsable del grupo" value="' + esc(p.cargo) + '"></div>' +
+      '<label class="f" for="fCar">En calidad de (cargo)</label><input id="fCar" type="text" autocomplete="off" placeholder="Por ejemplo: presidente, responsable del grupo" value="' + esc(p.cargo) + '">' +
+      '<label class="f" for="fDom">Domicilio social de la entidad</label><input id="fDom" type="text" autocomplete="street-address" placeholder="Calle, número, código postal y localidad" value="' + esc(p.domicilio) + '">' +
+      '<label class="f" for="fCif">CIF de la entidad (si tiene)</label><input id="fCif" type="text" autocomplete="off" value="' + esc(p.cif) + '"></div>' +
       '<div class="card"><label class="chk"><input type="checkbox" id="kAcepto"><span>He leído y acepto el contrato y la información sobre protección de datos, y actúo en nombre del grupo con la autorización de sus integrantes. <b>(obligatorio)</b></span></label>' +
       '<label class="chk"><input type="checkbox" id="kImg"><span>Autorizo la captación y difusión de imágenes. (opcional)</span></label></div>' +
       '<div class="card"><div class="card-tit">Firma</div><div class="hint" style="margin-bottom:6px">Firme con el dedo dentro del recuadro.</div>' +
@@ -69,14 +71,14 @@
       '<div style="text-align:right;margin-top:6px"><button type="button" class="b-link" id="bBorrar">Borrar firma</button></div></div>';
     pie.hidden = false;
     pie.innerHTML = '<button type="button" class="b-pri" id="bFirmar">Firmar el contrato</button>';
-    ['fNom', 'fDni', 'fCar'].forEach(function (id) { $('#' + id).oninput = actualizarHuecos; });
+    ['fNom', 'fDni', 'fCar', 'fDom', 'fCif'].forEach(function (id) { $('#' + id).oninput = actualizarHuecos; });
     actualizarHuecos();
     prepararPad();
     $('#bBorrar').onclick = function () { trazos = []; dibujar(); };
     $('#bFirmar').onclick = enviar;
   }
   function actualizarHuecos() {
-    var v = { representante: $('#fNom').value.trim(), dni: $('#fDni').value.trim(), cargo: $('#fCar').value.trim() };
+    var v = { representante: $('#fNom').value.trim(), dni: $('#fDni').value.trim(), cargo: $('#fCar').value.trim(), domicilio: $('#fDom').value.trim(), cif_cliente: $('#fCif').value.trim() };
     Array.prototype.forEach.call(document.querySelectorAll('.hueco'), function (h) { h.textContent = v[h.dataset.h] || '________'; });
   }
 
@@ -113,15 +115,17 @@
 
   function enviar() {
     var nom = $('#fNom').value.trim(), dni = $('#fDni').value.trim(), car = $('#fCar').value.trim();
+    var dom = $('#fDom').value.trim(), cif = $('#fCif').value.trim();
     if (nom.length < 3) return toast('Escriba su nombre y apellidos.', true);
     if (dni.length < 5) return toast('Escriba su DNI.', true);
+    if (dom.length < 5) return toast('Escriba el domicilio social de la entidad.', true);
     if (!$('#kAcepto').checked) return toast('Marque la casilla obligatoria para poder firmar.', true);
     var puntos = trazos.reduce(function (n, t) { return n + t.length; }, 0);
     if (puntos < 8) return toast('Firme con el dedo dentro del recuadro.', true);
     var b = $('#bFirmar'); b.disabled = true; b.textContent = 'Firmando…';
     var firma = rutaFirma(), img = $('#kImg').checked;
-    DB.enviarFirma(TOKEN, { nombre: nom, dni: dni, cargo: car, acepto: true, imagenes: img, firma: firma }).then(function (r) {
-      INFO.firmado = { firmadoEl: r.recibido || r.firmadoEl, nombre: nom, dni: dni, cargo: car, imagenes: img, firma: firma,
+    DB.enviarFirma(TOKEN, { nombre: nom, dni: dni, cargo: car, domicilio: dom, cif: cif, acepto: true, imagenes: img, firma: firma }).then(function (r) {
+      INFO.firmado = { firmadoEl: r.recibido || r.firmadoEl, nombre: nom, dni: dni, cargo: car, domicilio: dom, cif: cif || '—', imagenes: img, firma: firma,
         documento: INFO.documento };
       fin();
     }).catch(function (e) {
@@ -133,7 +137,7 @@
   // ---------------- Después de firmar ----------------
   function copia() {
     var f = INFO.firmado;
-    return htmlDoc(f.documento || INFO.documento, { representante: f.nombre, dni: f.dni, cargo: f.cargo, firmadoEl: f.firmadoEl }, f.firma, f.imagenes);
+    return htmlDoc(f.documento || INFO.documento, { representante: f.nombre, dni: f.dni, cargo: f.cargo, domicilio: f.domicilio, cif_cliente: f.cif, firmadoEl: f.firmadoEl }, f.firma, f.imagenes);
   }
   function fin() {
     pie.hidden = true; pie.innerHTML = '';
