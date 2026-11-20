@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.7.1';
+  var VERSION = '1.7.2';
   var VERSION_FECHA = '20/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -1281,9 +1281,11 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var r = reserva(id);
     if (!r || !r.formulario || !r.formulario.datos) { vista.innerHTML = botonVolver() + '<div class="vacio">No hay ningún formulario recibido para esta reserva.</div>'; enlazarVolver(); return; }
     var f = r.formulario, d = f.datos, p = d.personas || {}, g = d.grupo || {}, c = d.contacto || {}, h = d.habitaciones || {}, gd = r.grupoDatos || {};
-    function fila(et, nuevo, actual) {
-      var cambia = actual != null && String(nuevo || '') !== String(actual || '');
-      return '<div class="dato"><span>' + et + '</span><span>' + (esc(nuevo) || '—') + (cambia ? '<br><small class="sub">ahora: ' + (esc(actual) || '—') + '</small>' : '') + '</span></div>';
+    var cambios = [];
+    function fila(et, nuevo, actual, nombre) {
+      var cambia = actual != null && String(nuevo || '') !== String(actual || '') && String(nuevo || '') !== '';
+      if (cambia) cambios.push(nombre || et.toLowerCase());
+      return '<div class="dato"><span>' + et + '</span><span>' + (esc(nuevo) || '—') + (cambia ? '<br><small class="sub cambio">En la reserva pone ' + (esc(actual) || '—') + ' · se cambiará al aplicar</small>' : '') + '</span></div>';
     }
     var pers = (p.adultos || 0) + (p.ninos || 0) + (p.bebes || 0);
     var porSv = {}; (d.servicios || []).forEach(function (x) { (porSv[x.fecha] = porSv[x.fecha] || []).push(x.servicio + ' ' + x.total); });
@@ -1291,14 +1293,14 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var dias = Object.keys(porSv).concat(Object.keys(salas)).filter(function (x, i, a) { return a.indexOf(x) === i; }).sort();
     var gratis = cfg('edad.gratis_hasta') || 4, adulto = cfg('edad.adulto_desde') || 9;
     vista.innerHTML = botonVolver() +
-      '<div class="tarjeta"><h2>' + esc(r.grupo) + '</h2><p class="sub" style="margin:-6px 0 0">Recibido el ' + marcaCorta(f.enviadoEl) + ' · estado: <b>' + esc(f.estado) + '</b></p></div>' +
+      '<div class="tarjeta"><h2>' + esc(r.grupo) + '</h2><p class="sub" style="margin:-6px 0 0">Recibido el ' + marcaCorta(f.enviadoEl) + ' · estado: <b>' + esc(f.estado) + '</b></p>%%RESUMEN%%</div>' +
       '<div class="tarjeta"><h2>Personas</h2>' +
       fila('Adultos (desde ' + adulto + ')', p.adultos) + fila('Niños de ' + (+gratis + 1) + ' a ' + (adulto - 1), p.ninos) + fila('Niños de 0 a ' + gratis, p.bebes) +
-      fila('Total en la reserva', pers, r.personas) + '</div>' +
+      fila('Total en la reserva', pers, r.personas, 'personas') + '</div>' +
       '<div class="tarjeta"><h2>Contacto y datos para documentos</h2>' +
-      fila('Teléfono', c.telefono, r.telefono) + fila('Correo', c.email, r.email) +
-      fila('Entidad', g.entidad, gd.entidad) + fila('CIF', g.cif, gd.cif) + fila('Dirección', g.direccion, gd.direccion) +
-      fila('Representante', g.representante, gd.representante) + fila('DNI', g.dni, gd.dni) + fila('Cargo', g.cargo, gd.cargo) + '</div>' +
+      fila('Teléfono', c.telefono, r.telefono, 'teléfono') + fila('Correo', c.email, r.email, 'correo') +
+      fila('Entidad', g.entidad, gd.entidad || '') + fila('CIF', g.cif, gd.cif || '', 'CIF') + fila('Dirección', g.direccion, gd.direccion || '') +
+      fila('Representante', g.representante, gd.representante || '') + fila('DNI', g.dni, gd.dni || '', 'DNI') + fila('Cargo', g.cargo, gd.cargo || '') + '</div>' +
       '<div class="tarjeta"><h2>Servicios y salas</h2><p class="sub" style="margin:-4px 0 8px;font-size:13px">Total de personas en cada servicio (incluidos los de 0 a ' + gratis + '). Al aplicar se reparte: primero los de 0 a ' + gratis + ', luego los niños y el resto, adultos.</p>' + (dias.length ? dias.map(function (t) {
         return '<div class="dato"><span>' + esc(diaCorto(t)) + '</span><span>' + esc((porSv[t] || []).join(' · ')) + (salas[t] ? '<br><small class="sub">' + esc(salas[t].join(', ')) + '</small>' : '') + '</span></div>';
       }).join('') : '<p class="sub">Sin servicios.</p>') +
@@ -1318,6 +1320,9 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         ['datos', 'imagenes', 'autorizacion'].map(function (k) { var t = d.consentimientos.textos[k]; return t ? '<p>' + esc(t).replace(/\n/g, '<br>') + '</p>' : ''; }).join('') + '</details>' : '') + '</div>' +
       '<div class="form-espacio"></div><div class="pie-form"><div class="total">' + (f.estado === 'Aplicado' ? 'Ya aplicado' : 'Pendiente de aplicar') + '</div>' +
       '<button class="btn" id="frAplicar">' + (f.estado === 'Aplicado' ? 'Aplicar de nuevo' : 'Aplicar a la reserva') + '</button></div>';
+    vista.innerHTML = vista.innerHTML.replace('%%RESUMEN%%', cambios.length ?
+      '<p class="cambios-res">Al aplicar cambiarán ' + cambios.length + ' dato' + (cambios.length === 1 ? '' : 's') + ': ' + esc(cambios.join(', ')) + '.</p>' :
+      '<p class="sub" style="margin:8px 0 0;font-size:13px">Los datos de contacto y personas coinciden con la reserva.</p>');
     enlazarVolver();
     $('#frAplicar').onclick = function () {
       if (S.sinConexion) return toast('Sin conexión.', true);

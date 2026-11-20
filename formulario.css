@@ -67,3 +67,10 @@ table.g input[type=checkbox] { width: 24px; height: 24px; accent-color: #85200C;
 .leer[open] summary { border-bottom: 1px solid #E0D9CF; }
 .leer-txt { padding: 4px 12px 8px; max-height: 320px; overflow-y: auto; font-size: 13px; line-height: 1.5; color: #333; }
 .leer-txt p { margin: 8px 0; }
+/* v1.7.2: lo oculto, siempre oculto; pantalla final limpia */
+[hidden] { display: none !important; }
+body.fg-final, body.fg-final #fg, body.fg-final .fg-cab, body.fg-final .fg-grupo { background: #fff; }
+body.fg-final .fg-grupo, body.fg-final .fg-cab { border-bottom: 0; }
+.b-fin { display: block; width: 100%; max-width: 320px; height: 50px; margin: 24px auto 0; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
+.fin.adios { padding-top: 80px; }
+.fin.adios h2 { font-size: 22px; color: #85200C; }

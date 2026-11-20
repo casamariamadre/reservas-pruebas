@@ -287,10 +287,18 @@
       habitaciones: aloj() ? F.habitaciones : {}, alergias: F.hayAlergias ? F.alergias : [], consentimientos: cs };
     var b = $('#bSig'); b.disabled = true; b.textContent = 'Enviando…';
     DB.enviarFormulario(TOKEN, datos).then(function () {
-      $('#fgBarra').hidden = true; pie.hidden = true; $('#fgPaso').textContent = '';
-      vista.innerHTML = '<div class="card fin"><div class="ic" aria-hidden="true">✓</div><h2>¡Gracias! Formulario enviado</h2>' +
+      $('#fgBarra').hidden = true; pie.hidden = true; pie.innerHTML = ''; $('#fgPaso').textContent = '';
+      document.body.classList.add('fg-final');
+      $('#fgToast').hidden = true;
+      vista.innerHTML = '<div class="fin"><div class="ic" aria-hidden="true">✓</div><h2>¡Gracias! Formulario enviado</h2>' +
         '<p class="hint">La Casa ha recibido sus datos. Le enviaremos el presupuesto y el contrato para firmar.</p>' +
-        '<p class="hint">Si necesita corregir algo, puede volver a abrir este mismo enlace hasta el día de entrada.</p></div>';
+        '<p class="hint">Si necesita corregir algo, puede volver a abrir este mismo enlace hasta el día de entrada.</p>' +
+        '<button type="button" class="b-pri b-fin" id="bTerminar">Terminar</button></div>';
+      $('#bTerminar').onclick = function () {
+        $('#fgGrupo').textContent = '';
+        vista.innerHTML = '<div class="fin adios"><h2>Gracias, le esperamos pronto.</h2></div>';
+        window.scrollTo(0, 0);
+      };
       window.scrollTo(0, 0);
     }).catch(function (e) {
       b.disabled = false; b.textContent = 'Enviar a la Casa';

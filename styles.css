@@ -561,3 +561,5 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 
 .txt-acep { margin-top: 8px; font-size: 13px; }
 .txt-acep summary { cursor: pointer; color: var(--texto-2); }
 .txt-acep p { margin: 8px 0 0; line-height: 1.45; }
+.cambios-res { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: #FFF4D6; color: #6B4A10; font-size: 13.5px; font-weight: 700; }
+.sub.cambio { color: #9A5B00; }
