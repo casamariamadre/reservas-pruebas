@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.5.1';
+  var VERSION = '1.5.2';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
   var $ = function (s, el) { return (el || document).querySelector(s); };
@@ -1006,16 +1006,180 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     modo = modo === 'liquidacion' ? 'liquidacion' : 'presupuesto';
     vista.innerHTML = botonVolver() +
       '<div class="hoja-barra"><div class="segmento" id="hModo"><button type="button" data-m="presupuesto"' + (modo === 'presupuesto' ? ' class="activo"' : '') + '>Presupuesto</button><button type="button" data-m="liquidacion"' + (modo === 'liquidacion' ? ' class="activo"' : '') + '>Liquidación</button></div>' +
-      '<div class="fila-btns"><button class="btn sec" id="hServ">Corregir servicios</button><button class="btn" id="hPdf">Imprimir / PDF</button></div></div>' +
+      '<div class="fila-btns"><button class="btn sec" id="hServ">Corregir servicios</button><button class="btn sec" id="hXls">Descargar Excel</button><button class="btn" id="hPdf">Imprimir / PDF</button></div></div>' +
       '<div class="hoja-marco">' + htmlHoja(r, modo) + '</div>';
     enlazarVolver();
     $('#hModo').onclick = function (e) { var b = e.target.closest('button'); if (b) ir('hoja/' + encodeURIComponent(r.id) + '?modo=' + b.dataset.m); };
     $('#hServ').onclick = function () { ir('servicios/' + encodeURIComponent(r.id)); };
+    $('#hXls').onclick = function () {
+      cargando(true);
+      excelHoja(r, modo).then(function () { toast('Excel descargado'); })
+        .catch(function (e) { toast(e.message || 'No se pudo crear el Excel.', true); }).then(function () { cargando(false); });
+    };
     $('#hPdf').onclick = function () {
       var t = document.title; document.title = (modo === 'liquidacion' ? 'Liquidación' : 'Presupuesto') + ' · ' + r.grupo;
       document.body.classList.add('imprimiendo-hoja'); window.print();
       setTimeout(function () { document.body.classList.remove('imprimiendo-hoja'); document.title = t; }, 800);
     };
+  }
+
+  // ---------------- 1.5.2 · Hoja de estancia en Excel ----------------
+  var EXCEL_URL = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+  var excelCarga = null;
+  function cargarExcelJS() {
+    if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+    if (excelCarga) return excelCarga;
+    excelCarga = new Promise(function (ok, mal) {
+      var s = document.createElement('script'); s.src = EXCEL_URL; s.integrity = 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz'; s.crossOrigin = 'anonymous';
+      s.onload = function () { window.ExcelJS ? ok(window.ExcelJS) : mal(new Error('No se pudo preparar el Excel.')); };
+      s.onerror = function () { excelCarga = null; mal(new Error('No se pudo descargar el programa de Excel. Comprueba la conexión.')); };
+      document.head.appendChild(s);
+    });
+    return excelCarga;
+  }
+  function nombreArchivo(t) { return String(t).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80); }
+
+  function excelHoja(r, modo) {
+    return cargarExcelJS().then(function (ExcelJS) {
+      var liq = modo === 'liquidacion', m = mapaServ(r), g = r.grupoDatos || {}, c = calcularHoja(r);
+      var gratis = +cfg('edad.gratis_hasta') || 4, adulto = +cfg('edad.adulto_desde') || 9;
+      var dias = diasDe(r), aloj = tipo(r) === 'Alojamiento';
+      var GRANATE = 'FF85200C', LINEA = 'FFDDD5CC', SUAVE = 'FFF7F1EA';
+      var EUR = '#,##0.00 "€"';
+      var wb = new ExcelJS.Workbook(); wb.creator = 'App Casa María Madre'; wb.created = new Date();
+      var ws = wb.addWorksheet(liq ? 'Liquidación' : 'Presupuesto', {
+        pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } },
+        views: [{ showGridLines: false }]
+      });
+      // Columnas: Día + (adultos, niños) por servicio + Salas
+      var serv = COMIDAS.map(function (x) { return x[0]; }); if (aloj) serv.push('Noche');
+      var nCol = 2 + serv.length * 2; // A = día, luego pares, última = salas
+      var anchos = [16]; serv.forEach(function () { anchos.push(9, 9); }); anchos.push(22); anchos[nCol - 2] = Math.max(anchos[nCol - 2], 12); anchos[nCol - 3] = Math.max(anchos[nCol - 3], 10);
+      ws.columns = anchos.map(function (w) { return { width: w }; });
+      function L(n) { var s = ''; n++; while (n > 0) { var k = (n - 1) % 26; s = String.fromCharCode(65 + k) + s; n = Math.floor((n - 1) / 26); } return s; } // 0 → A
+      var UL = L(nCol - 1);
+      var fila = 1;
+      function unir(f, a, b) { ws.mergeCells(L(a) + f + ':' + L(b) + f); }
+      function borde(cel, grueso) { cel.border = { bottom: { style: grueso ? 'medium' : 'thin', color: { argb: grueso ? GRANATE : LINEA } } }; }
+      // Cabecera
+      var cel = ws.getCell('A1'); cel.value = cfg('casa.nombre') || 'Casa de Espiritualidad María Madre';
+      cel.font = { name: 'Georgia', size: 15, bold: true, color: { argb: GRANATE } }; unir(1, 0, nCol - 4);
+      cel = ws.getCell(L(nCol - 3) + '1'); cel.value = 'HOJA DE ESTANCIA'; cel.font = { name: 'Georgia', size: 13, bold: true }; cel.alignment = { horizontal: 'right' }; unir(1, nCol - 3, nCol - 1);
+      cel = ws.getCell('A2'); cel.value = [cfg('casa.direccion'), cfg('casa.cp_ciudad'), cfg('casa.cif') ? 'CIF ' + cfg('casa.cif') : ''].filter(Boolean).join(' · '); cel.font = { size: 9 }; unir(2, 0, nCol - 4);
+      cel = ws.getCell(L(nCol - 3) + '2'); cel.value = liq ? 'LIQUIDACIÓN' : 'PRESUPUESTO';
+      cel.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cel.alignment = { horizontal: 'center' };
+      cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: liq ? 'FF1F5F3A' : GRANATE } }; unir(2, nCol - 3, nCol - 1);
+      cel = ws.getCell('A3'); cel.value = [cfg('casa.telefono'), cfg('casa.email')].filter(Boolean).join(' · '); cel.font = { size: 9 }; unir(3, 0, nCol - 4);
+      cel = ws.getCell(L(nCol - 3) + '3'); cel.value = 'Ref. ' + r.id + ' · ' + legible(hoyTxt()); cel.font = { size: 9, color: { argb: 'FF555555' } }; cel.alignment = { horizontal: 'right' }; unir(3, nCol - 3, nCol - 1);
+      for (var k = 0; k < nCol; k++) borde(ws.getCell(L(k) + '3'), true);
+      fila = 5;
+      // Datos del grupo
+      var adMax = 0, niMax = 0; (r.servicios || []).forEach(function (x) { if (SALAS.indexOf(x.servicio) < 0) { adMax = Math.max(adMax, x.adultos); niMax = Math.max(niMax, x.ninos); } });
+      [['Grupo', r.grupo],
+       ['Responsable', [r.responsable, r.telefono, r.email].filter(Boolean).join(' · ') || '—'],
+       ['Entrada', diaSemana(r.entrada) + ', ' + r.horaEntrada],
+       ['Salida', diaSemana(r.salida) + ', ' + r.horaSalida],
+       ['Personas', adMax + ' adultos' + (niMax ? ' · ' + niMax + ' niños (' + (gratis + 1) + ' a ' + (adulto - 1) + ' años)' : '')],
+       ['Entidad y CIF', [g.entidad, g.cif].filter(Boolean).join(' · ') || '—'],
+       ['Dirección', g.direccion || '—']
+      ].forEach(function (d) {
+        var a = ws.getCell('A' + fila); a.value = d[0].toUpperCase(); a.font = { size: 8.5, color: { argb: 'FF666666' } };
+        var b = ws.getCell('B' + fila); b.value = d[1]; b.font = d[0] === 'Grupo' ? { bold: true } : {}; unir(fila, 1, nCol - 1);
+        fila++;
+      });
+      fila++;
+      function titulo(t) { var x = ws.getCell('A' + fila); x.value = t; x.font = { name: 'Georgia', size: 12, bold: true, color: { argb: GRANATE } }; fila++; }
+      // Servicios por día (números editables)
+      titulo('Servicios por día');
+      var f1 = fila, f2 = fila + 1;
+      ws.getCell('A' + f1).value = 'Día'; ws.mergeCells('A' + f1 + ':A' + f2);
+      serv.forEach(function (s, i) { var col = 1 + i * 2; ws.getCell(L(col) + f1).value = s; unir(f1, col, col + 1); ws.getCell(L(col) + f2).value = 'Adultos'; ws.getCell(L(col + 1) + f2).value = 'Niños'; });
+      ws.getCell(UL + f1).value = 'Salas'; ws.mergeCells(UL + f1 + ':' + UL + f2);
+      [f1, f2].forEach(function (f) { for (var k = 0; k < nCol; k++) { var x = ws.getCell(L(k) + f); x.font = { bold: true, size: f === f1 ? 9.5 : 8.5, color: { argb: 'FF444444' } }; x.alignment = { horizontal: k === 0 || k === nCol - 1 ? 'left' : 'center', vertical: 'middle' }; x.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUAVE } }; } });
+      for (k = 0; k < nCol; k++) borde(ws.getCell(L(k) + f2), true);
+      fila = f2 + 1;
+      var fIni = fila;
+      dias.forEach(function (t, di) {
+        ws.getCell('A' + fila).value = diaCorto(t); ws.getCell('A' + fila).font = { bold: true };
+        serv.forEach(function (s, i) {
+          var x = m[t + '|' + s] || {}, col = 1 + i * 2;
+          var ca = ws.getCell(L(col) + fila), cn = ws.getCell(L(col + 1) + fila);
+          ca.value = x.adultos || null; cn.value = x.ninos || null;
+          ca.alignment = cn.alignment = { horizontal: 'center' };
+        });
+        ws.getCell(UL + fila).value = SALAS.filter(function (sa) { return m[t + '|' + sa]; }).join(', ') || null;
+        for (var k = 0; k < nCol; k++) borde(ws.getCell(L(k) + fila));
+        fila++;
+      });
+      var fFin = fila - 1;
+      fila++;
+      // Importe (fórmulas)
+      titulo('Importe');
+      var cC = 'A', cU = L(nCol - 3), cP = L(nCol - 2), cI = UL;
+      ws.getCell(cC + fila).value = 'Concepto'; unir(fila, 0, nCol - 4);
+      ws.getCell(cU + fila).value = 'Unidades'; ws.getCell(cP + fila).value = 'Precio'; ws.getCell(cI + fila).value = 'Importe';
+      [cC, cU, cP, cI].forEach(function (cl) { var x = ws.getCell(cl + fila); x.font = { bold: true, size: 9.5, color: { argb: 'FF444444' } }; x.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUAVE } }; x.alignment = { horizontal: cl === cC ? 'left' : 'right' }; });
+      for (k = 0; k < nCol; k++) borde(ws.getCell(L(k) + fila), true);
+      fila++;
+      var fImpIni = fila, rango = function (col) { return col + fIni + ':' + col + fFin; };
+      var porServ = {}; (r.servicios || []).forEach(function (x) { var q = porServ[x.servicio] = porServ[x.servicio] || { a: 0, n: 0, d: 0 }; q.a += x.adultos; q.n += x.ninos; q.d++; });
+      var conceptos = [];
+      [['Desayuno', 'desayuno', 'Desayuno'], ['Comida', 'comida', 'Comida'], ['Cena', 'cena', 'Cena'], ['Noche', 'noche', 'Alojamiento (noche)']].forEach(function (cx) {
+        var i = serv.indexOf(cx[0]); if (i < 0) return; var q = porServ[cx[0]] || { a: 0, n: 0 };
+        conceptos.push({ txt: cx[2] + ' · adulto', f: 'SUM(' + rango(L(1 + i * 2)) + ')', u: q.a, p: cfgNum('precio.adulto.' + cx[1]) });
+        conceptos.push({ txt: cx[2] + ' · niño', f: 'SUM(' + rango(L(2 + i * 2)) + ')', u: q.n, p: cfgNum('precio.nino.' + cx[1]) });
+      });
+      [['Salón', 'salon'], ['Salas', 'salas'], ['Capilla', 'capilla'], ['Garaje', 'garaje']].forEach(function (cx) {
+        var q = porServ[cx[0]] || { d: 0 };
+        conceptos.push({ txt: cx[0] + ' (días)', f: 'COUNTIF(' + rango(UL) + ',"*' + cx[0] + '*")', u: q.d, p: cfgNum('precio.' + cx[1]) });
+      });
+      conceptos.forEach(function (cx) {
+        ws.getCell(cC + fila).value = cx.txt; unir(fila, 0, nCol - 4);
+        var u = ws.getCell(cU + fila); u.value = { formula: cx.f, result: cx.u }; u.alignment = { horizontal: 'right' };
+        var p = ws.getCell(cP + fila); p.value = cx.p; p.numFmt = EUR;
+        if (cx.p == null) { p.value = 'a consultar'; p.alignment = { horizontal: 'right' }; p.font = { italic: true, color: { argb: 'FF777777' } }; }
+        var im = ws.getCell(cI + fila);
+        im.value = { formula: 'IF(ISNUMBER(' + cP + fila + '),' + cU + fila + '*' + cP + fila + ',"—")', result: cx.p == null ? '—' : Math.round(cx.u * cx.p * 100) / 100 }; im.alignment = { horizontal: 'right' };
+        im.numFmt = EUR;
+        for (var k = 0; k < nCol; k++) borde(ws.getCell(L(k) + fila));
+        fila++;
+      });
+      var fImpFin = fila - 1;
+      fila++;
+      function tot(txt, val, negrita, color) {
+        var a = ws.getCell(cP + fila); a.value = txt; a.alignment = { horizontal: 'right' }; a.font = { bold: !!negrita, color: color ? { argb: color } : undefined };
+        var b = ws.getCell(cI + fila); b.value = val; b.numFmt = EUR; b.font = { bold: !!negrita, color: color ? { argb: color } : undefined };
+        return fila++;
+      }
+      var fT = tot('Total' + (c.consultar ? '*' : ''), { formula: 'SUM(' + cI + fImpIni + ':' + cI + fImpFin + ')', result: c.total }, true);
+      var fS = tot('Señal pagada', c.senal);
+      var fP = tot('Pendiente', { formula: cI + fT + '-' + cI + fS, result: c.pendiente }, true, GRANATE);
+      ws.getCell(cP + fP).border = ws.getCell(cI + fP).border = { top: { style: 'thin', color: { argb: GRANATE } } };
+      if (c.consultar) { ws.getCell(cP + fila).value = '* Sin incluir los conceptos «a consultar».'; ws.getCell(cP + fila).font = { size: 8.5, color: { argb: 'FF666666' } }; ws.getCell(cP + fila).alignment = { horizontal: 'right' }; fila++; }
+      fila++;
+      // Condiciones y pie
+      function parrafo(txt, alto, fuente) {
+        var x = ws.getCell('A' + fila); x.value = txt; x.alignment = { wrapText: true, vertical: 'top' }; x.font = fuente || { size: 9 };
+        unir(fila, 0, nCol - 1); ws.getRow(fila).height = alto; fila++;
+      }
+      titulo('Condiciones');
+      var cond = 'Niños de 0 a ' + gratis + ' años: gratis. De ' + (gratis + 1) + ' a ' + (adulto - 1) + ' años: precio de niño. A partir de ' + adulto + ' años: como adulto.';
+      if (cfgNum('precio.solo_uso') != null) cond += '\nSolo uso de la casa (calefacción, luz, agua…): ' + euros(cfgNum('precio.solo_uso')) + ' por persona.';
+      if (cfg('texto.condiciones')) cond += '\n' + cfg('texto.condiciones');
+      parrafo(cond, 14 * Math.max(2, cond.split('\n').length + Math.floor(cond.length / 110)));
+      var pie = cfg('texto.pie_pago').replace('{dias}', cfg('pago.dias_despues') || '5').replace('{casa}', cfg('casa.nombre')).replace('{iban}', cfg('casa.iban'));
+      if (pie) parrafo(pie, 14 * Math.max(2, 1 + Math.floor(pie.length / 110)));
+      parrafo(liq ? 'Cantidades realmente servidas, revisadas por el gestor.' : 'Calculado con los servicios previstos. La liquidación final se hará con lo realmente servido. Si cambias cantidades en «Servicios por día», el importe se recalcula solo.', 26, { size: 8.5, italic: true, color: { argb: 'FF555555' } });
+      ws.pageSetup.printArea = 'A1:' + UL + (fila - 1);
+      return wb.xlsx.writeBuffer().then(function (buf) {
+        var nombre = nombreArchivo((liq ? 'Liquidación' : 'Presupuesto') + ' - ' + r.grupo + ' - ' + legible(r.entrada).replace(/\//g, '-')) + '.xlsx';
+        var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre;
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+        return nombre;
+      });
+    });
   }
 
   // ---------------- Administración (solo administradores) ----------------

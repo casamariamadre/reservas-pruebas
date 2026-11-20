@@ -516,3 +516,11 @@ body[data-vista="calendario"] .cal-solo .semana { flex: 1 0 auto; min-height: 48
 .sv-pers .sv-num { justify-content: flex-end; }
 .sv-dia .sv-fila + .sv-fila .sv-num span { display: none; }
 .sv-dia .sv-fila + .sv-fila > b { padding-bottom: 10px; }
+/* v1.5.2: botones de la hoja de estancia (Excel) */
+.hoja-barra .fila-btns .btn { flex: 1 1 auto; white-space: nowrap; }
+@media (max-height: 500px) and (orientation: landscape) {
+  .hoja-barra { flex-wrap: nowrap; margin-bottom: 8px; }
+  .hoja-barra .segmento { flex: 0 1 260px; }
+  .hoja-barra .fila-btns { flex: 1 1 auto; flex-wrap: nowrap; gap: 6px; }
+  .hoja-barra .fila-btns .btn { min-height: 38px; padding: 6px 10px; font-size: 14px; }
+}
