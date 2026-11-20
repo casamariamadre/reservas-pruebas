@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.9.0';
+  var VERSION = '2.0.0';
   var VERSION_FECHA = '20/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -180,7 +180,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
 
   // ---------------- Navegación ----------------
-  var TITULOS = { calendario: 'Calendario', reservas: 'Reservas', nueva: 'Nueva reserva', editar: 'Editar reserva', reserva: 'Reserva', ajustes: 'Ajustes', admin: 'Administración', servicios: 'Servicios y datos', hoja: 'Hoja de estancia', formulario: 'Formulario del grupo', reparto: 'Reparto de habitaciones', habitaciones: 'Hoja de habitaciones' };
+  var TITULOS = { calendario: 'Calendario', reservas: 'Reservas', nueva: 'Nueva reserva', editar: 'Editar reserva', reserva: 'Reserva', ajustes: 'Ajustes', admin: 'Administración', servicios: 'Servicios y datos', hoja: 'Hoja de estancia', formulario: 'Formulario del grupo', reparto: 'Reparto de habitaciones', habitaciones: 'Hoja de habitaciones', contrato: 'Contrato' };
   function ruta() {
     var h = location.hash.replace(/^#\/?/, '');
     var q = {}, partes = h.split('?');
@@ -210,7 +210,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     $('#tituloVista').textContent = TITULOS[r.vista] || '';
     document.body.setAttribute('data-vista', r.vista);
     $$('.menu button').forEach(function (b) {
-      b.classList.toggle('activo', b.dataset.ir === r.vista || (b.dataset.ir === 'reservas' && (r.vista === 'reserva' || r.vista === 'servicios' || r.vista === 'hoja' || r.vista === 'formulario' || r.vista === 'reparto' || r.vista === 'habitaciones')) || (b.dataset.ir === 'ajustes' && r.vista === 'admin'));
+      b.classList.toggle('activo', b.dataset.ir === r.vista || (b.dataset.ir === 'reservas' && (r.vista === 'reserva' || r.vista === 'servicios' || r.vista === 'hoja' || r.vista === 'formulario' || r.vista === 'reparto' || r.vista === 'habitaciones' || r.vista === 'contrato')) || (b.dataset.ir === 'ajustes' && r.vista === 'admin'));
     });
     vista.scrollTop = 0; window.scrollTo(0, 0);
     switch (r.vista) {
@@ -225,6 +225,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       case 'formulario': return pintarFormularioRecibido(r.id);
       case 'reparto': return pintarReparto(r.id);
       case 'habitaciones': return pintarHojaHab(r.id);
+      case 'contrato': return pintarContrato(r.id);
       default: return pintarCalendario();
     }
   }
@@ -630,13 +631,22 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       : { t: 'Presupuesto', e: 'pend', txt: 'Sin enviar', cq: '', acc: { txt: 'Ver', fn: function () { ir('hoja/' + idq + '?modo=presupuesto'); } },
           marca: { txt: 'Marcar enviado', tipo: 'presupuesto_enviado' }, sig: 'Enviar el presupuesto' });
     // 5. Contrato y fianza
-    var con = marcaDoc(r, 'Contrato enviado', 'Contrato: marcado'), fz = fianzaPagada(r);
-    P.push({ t: 'Contrato y fianza', e: con.enviado && fz.pagada ? 'ok' : con.enviado || fz.pagada ? 'ahora' : 'pend',
-      txt: 'Contrato: ' + (con.enviado ? 'enviado' : 'sin enviar') + ' · Fianza: ' + (fz.pagada ? 'pagada' : 'pendiente'),
-      cq: cuandoQuien(fz.b && (!con.b || fz.b.fecha > con.b.fecha) ? fz.b : con.b),
-      marcas: [con.enviado ? { txt: 'Deshacer: contrato', tipo: 'contrato_no' } : { txt: 'Marcar contrato enviado', tipo: 'contrato_enviado' },
-        fz.pagada ? { txt: 'Deshacer: fianza', tipo: 'fianza_pendiente' } : { txt: 'Marcar fianza pagada', tipo: 'fianza_pagada' }],
-      sig: !con.enviado ? 'Enviar el contrato' : !fz.pagada ? 'Comprobar la fianza' : '', sigMarca: !con.enviado ? 'contrato_enviado' : 'fianza_pagada' });
+    // 2.0.0: el contrato se firma desde el móvil (o se marca «firmado en papel»)
+    var fi = r.firma, papel = marcaDoc(r, 'Contrato firmado en papel', 'Contrato: marcado sin firmar'), fz = fianzaPagada(r);
+    var cEnv = ultimaNota(r, ['Contrato enviado', 'Contrato: enlace creado']);
+    var firmado = (fi && fi.estado === 'Firmado') || papel.enviado, esperaFirma = !firmado && fi && fi.estado === 'Pendiente';
+    var cTxt = fi && fi.estado === 'Firmado' ? 'firmado por ' + fi.nombre : papel.enviado ? 'firmado en papel' : esperaFirma ? 'enviado, esperando firma' : 'sin enviar';
+    var cCq = fi && fi.estado === 'Firmado' ? fechaCorta(fi.firmadoEl) + ' · ' + fi.nombre : papel.enviado ? cuandoQuien(papel.b) : esperaFirma ? cuandoQuien(cEnv) : '';
+    var fzMarca = fz.pagada ? { txt: 'Deshacer: fianza', tipo: 'fianza_pendiente' } : { txt: 'Marcar fianza pagada', tipo: 'fianza_pagada' };
+    P.push({ t: 'Contrato y fianza', e: firmado && fz.pagada ? 'ok' : firmado || fz.pagada || esperaFirma ? 'ahora' : 'pend',
+      txt: 'Contrato ' + cTxt + ' · Fianza ' + (fz.pagada ? 'pagada' : 'pendiente'),
+      cq: [cCq, fz.b ? 'fianza ' + cuandoQuien(fz.b) : ''].filter(Boolean).join(' · '),
+      acc: firmado ? { txt: 'Ver contrato', fn: function () { ir('contrato/' + idq); } }
+        : { txt: esperaFirma ? 'Reenviar' : 'Enviar para firmar', fn: function () { enviarContrato(r); } },
+      marcas: (firmado ? [] : [{ txt: 'Firmado en papel', tipo: 'contrato_papel' }]).concat(papel.enviado ? [{ txt: 'Deshacer: papel', tipo: 'contrato_papel_no' }] : []).concat([fzMarca]),
+      espera: esperaFirma && fz.pagada,
+      sig: !firmado && !esperaFirma ? 'Enviar el contrato para firmar' : !fz.pagada ? 'Comprobar la fianza' : '',
+      sigMarca: !firmado && !esperaFirma ? '' : 'fianza_pagada' });
     // 6. Estancia
     var dias = Math.round((aFecha(r.entrada) - aFecha(hoy)) / 864e5);
     P.push(hoy < r.entrada ? { t: 'Estancia', e: 'pend', txt: 'Empieza ' + (dias === 1 ? 'mañana' : 'en ' + dias + ' días'), cq: '' }
@@ -657,6 +667,58 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       .then(function (d) { cargando(false); compartirEnlace(reserva(r.id) || r, d.enlace); })
       .catch(function (e) { cargando(false); toast(e.message, true); });
   }
+  function enviarContrato(r) {
+    if (S.sinConexion) return toast('Sin conexión.', true);
+    var h = calcularHoja(r);
+    var seguir = h.total > 0 ? Promise.resolve(true)
+      : confirmar('La hoja de estancia de esta reserva no tiene importe (no hay servicios). El contrato saldría sin precio. ¿Enviarlo igualmente?', 'Enviar igualmente');
+    seguir.then(function (ok) {
+      if (!ok) return;
+      cargando(true);
+      usarDB(function () { return DB.enlaceContrato(r.id, h.total); })
+        .then(function (d) { cargando(false); compartirEnlace(reserva(r.id) || r, d.enlace, 'contrato'); })
+        .catch(function (e) { cargando(false); toast(e.message, true); });
+    });
+  }
+
+  // ---------------- 2.0.0 · Contrato (ver / imprimir, firmado o vista previa) ----------------
+  function htmlContrato(d) {
+    var doc = d.documento || {}, c = doc.consentimiento || {}, casa = d.casa || {};
+    var cuerpo = (doc.bloques || []).map(function (b) {
+      var x = esc(b.x);
+      return b.t === 'h' ? '<h3 class="ct-h">' + x + '</h3>' : b.t === 'c' ? '<h4 class="ct-c">' + x + '</h4>' : b.t === 'd' ? '<p class="ct-d">' + x + '</p>' : '<p>' + x + '</p>';
+    }).join('');
+    var firmaSvg = d.firma ? '<svg class="ct-firma" viewBox="0 0 600 200" preserveAspectRatio="xMidYMid meet"><path d="' + esc(d.firma) + '" fill="none" stroke="#123" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '<div class="ct-firma vacia"></div>';
+    return '<div class="hoja-doc contrato-doc">' + cuerpo +
+      '<h3 class="ct-h">INFORMACIÓN SOBRE PROTECCIÓN DE DATOS</h3>' + String(c.datos || '').split(/\n+/).map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') +
+      '<p><b>' + (d.firmado ? (d.imagenes ? '☑' : '☐') : '☐') + '</b> ' + esc(c.imagenes || '') + '</p>' +
+      '<p><b>Declaración:</b> ' + esc(c.autorizacion || '') + '</p>' +
+      '<div class="ct-firmas"><div><small>Por el prestador del servicio</small><div class="ct-firma vacia"></div><b>' + esc(casa.firmante || '') + '</b><br>' + esc(casa.cargo || '') + '</div>' +
+      '<div><small>Por el cliente</small>' + firmaSvg + '<b>' + esc(d.nombre || '') + '</b>' + (d.dni ? '<br>DNI ' + esc(d.dni) : '') + (d.cargo ? ' · ' + esc(d.cargo) : '') +
+      (d.firmado ? '<br><small>Firmado electrónicamente el ' + esc(marcaLegible(d.firmadoEl)) + '</small>' : '') + '</div></div></div>';
+  }
+  function pintarContrato(id) {
+    var r = reserva(id);
+    if (!r) { vista.innerHTML = botonVolver() + '<div class="vacio">La reserva no existe.</div>'; enlazarVolver(); return; }
+    vista.innerHTML = '<div class="vacio">Cargando el contrato…</div>';
+    cargando(true);
+    usarDB(function () { return DB.verContrato(r.id, r.firma && r.firma.importe ? undefined : calcularHoja(r).total); }).then(function (d) {
+      cargando(false);
+      vista.innerHTML = '<div class="hoja-barra"><div class="fila-btns">' + (!d.firmado ? '<button class="btn sec" id="ctEnviar">Enviar para firmar</button>' : '') +
+        '<button class="btn" id="ctPdf">Imprimir / PDF</button></div>' +
+        (d.firmado ? '<p class="sub" style="margin:8px 0 0">Firmado por <b>' + esc(d.nombre) + '</b> el ' + esc(marcaLegible(d.firmadoEl)) + '.</p>'
+          : '<p class="sub" style="margin:8px 0 0">Vista previa: aún no está firmado.' + (d.incompleto ? ' <b>Falta completar el texto del contrato en Administración › Contrato.</b>' : '') + '</p>') + '</div>' +
+        '<div class="hoja-marco">' + htmlContrato(d) + '</div>';
+      enlazarVolver();
+      if ($('#ctEnviar')) $('#ctEnviar').onclick = function () { enviarContrato(r); };
+      $('#ctPdf').onclick = function () {
+        var t = document.title; document.title = 'Contrato · ' + r.grupo;
+        document.body.classList.add('imprimiendo-hoja'); window.print();
+        setTimeout(function () { document.body.classList.remove('imprimiendo-hoja'); document.title = t; }, 800);
+      };
+    }).catch(function (e) { cargando(false); vista.innerHTML = '<div class="vacio">' + esc(e.message) + '</div>'; enlazarVolver(); });
+  }
+
   function anotar(r, tipoNota, texto, ok) {
     if (S.sinConexion) return toast('Sin conexión.', true);
     cargando(true);
@@ -729,7 +791,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       (pasos.length ? '<div class="tarjeta exp-pasos"><h2>Evolución</h2>' + pasos.map(lineaPaso).join('') + '</div>' : '') +
       // Siguiente paso
       (pasos.length ? '<div class="exp-sig">' + (sig ? '<span>Siguiente paso</span><button class="btn" id="dSig">' + esc(sig.sig) + '</button>'
-        : '<span>' + (pasos.some(function (p) { return p.espera; }) ? 'Esperando el formulario del grupo.' : 'Todo al día.') + '</span>') + '</div>' : '') +
+        : '<span>' + (pasos.some(function (p) { return p.espera; }) ? 'Esperando respuesta del grupo.' : 'Todo al día.') + '</span>') + '</div>' : '') +
       // Apartados plegados
       apartado('datos', 'Datos de la reserva', esc(r.responsable || tipo(r)), datos) +
       (fTarjeta ? apartado('formulario', 'Formulario del grupo', esc(pasos[1] ? pasos[1].txt : ''), fTarjeta) : '') +
@@ -758,6 +820,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     });
     if ($('#dSig')) $('#dSig').onclick = function () {
       if (sig.acc && !sig.sigMarca) return sig.acc.fn();
+      if (sig.sigMarca === '' && sig.acc) return sig.acc.fn();
       if (sig.sigMarca) return anotar(r, sig.sigMarca, '', 'Anotado');
       if (sig.marca) return anotar(r, sig.marca.tipo, '', 'Anotado');
     };
@@ -1428,24 +1491,30 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       });
     };
   }
-  function compartirEnlace(r, enlace) {
+  function compartirEnlace(r, enlace, cual) {
+    var contrato = cual === 'contrato';
     // Cada forma de envío queda en la bitácora (sin esperar ni mostrar el reloj).
     var apuntado = {};
-    function apuntar(t) { if (apuntado[t] || S.sinConexion) return; apuntado[t] = 1; usarDB(function () { return DB.anotar(r.id, t); }).catch(function () {}); }
-    var texto = 'Hola. Para preparar vuestra estancia en la Casa de Espiritualidad María Madre (' + legible(r.entrada) + ' a ' + legible(r.salida) +
+    function apuntar(t) {
+      if (contrato) t = 'contrato_enviado';
+      if (apuntado[t] || S.sinConexion) return; apuntado[t] = 1; usarDB(function () { return DB.anotar(r.id, t); }).catch(function () {});
+    }
+    var texto = contrato
+      ? 'Hola. Os enviamos el contrato de vuestra estancia en la Casa de Espiritualidad María Madre (' + legible(r.entrada) + ' a ' + legible(r.salida) + '). Podéis leerlo y firmarlo desde el móvil en este enlace:'
+      : 'Hola. Para preparar vuestra estancia en la Casa de Espiritualidad María Madre (' + legible(r.entrada) + ' a ' + legible(r.salida) +
       '), por favor rellenad este formulario. Podéis corregirlo con el mismo enlace hasta el día de entrada:';
-    modal('<p style="margin-bottom:6px"><b>Enlace del formulario</b></p><p class="sub" style="margin:0 0 10px">Envíalo al responsable del grupo. Solo sirve para esta reserva.</p>' +
+    modal('<p style="margin-bottom:6px"><b>' + (contrato ? 'Enlace para firmar el contrato' : 'Enlace del formulario') + '</b></p><p class="sub" style="margin:0 0 10px">Envíalo al responsable del grupo. Solo sirve para esta reserva.</p>' +
       '<input class="entrada" id="feEnlace" readonly value="' + esc(enlace) + '" style="font-size:14px">' +
       '<div class="fila-btns" style="margin-top:10px">' + (navigator.share ? '<button class="btn" data-r="share">Compartir…</button>' : '') +
       '<button class="btn sec" data-r="copiar">Copiar</button></div>' +
       '<div class="fila-btns" style="margin-top:8px"><a class="btn sec" data-log="enlace_whatsapp" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(texto + ' ' + enlace) + '">WhatsApp</a>' +
-      '<a class="btn sec" data-log="enlace_correo" href="mailto:' + esc(r.email || '') + '?subject=' + encodeURIComponent('Formulario de su estancia · Casa María Madre') + '&body=' + encodeURIComponent(texto + '\n\n' + enlace) + '">Correo</a></div>' +
+      '<a class="btn sec" data-log="enlace_correo" href="mailto:' + esc(r.email || '') + '?subject=' + encodeURIComponent((contrato ? 'Contrato' : 'Formulario') + ' de su estancia · Casa María Madre') + '&body=' + encodeURIComponent(texto + '\n\n' + enlace) + '">Correo</a></div>' +
       '<div class="fila-btns" style="margin-top:8px"><button class="btn borde" data-r="0">Cerrar</button></div>',
       function (e, cerrar) {
         var lg = e.target.closest('[data-log]'); if (lg) apuntar(lg.dataset.log);
         var b = e.target.closest('[data-r]'); if (!b) return;
         if (b.dataset.r === '0') { cerrar(); pintar(); return; }
-        if (b.dataset.r === 'share') { navigator.share({ title: 'Formulario · Casa María Madre', text: texto, url: enlace }).then(function () { apuntar('enlace_compartido'); }).catch(function () {}); return; }
+        if (b.dataset.r === 'share') { navigator.share({ title: (contrato ? 'Contrato' : 'Formulario') + ' · Casa María Madre', text: texto, url: enlace }).then(function () { apuntar('enlace_compartido'); }).catch(function () {}); return; }
         if (b.dataset.r === 'copiar') {
           var i = $('#feEnlace'); i.select(); i.setSelectionRange(0, 9999);
           apuntar('enlace_copiado');
@@ -1768,7 +1837,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     function campo(a) {
       var id = 'ad_' + a.clave.replace(/\W/g, '_');
       var etiqueta = esc(a.descripcion) + (a.tipo === 'euros' ? ' (€)' : '');
-      if (a.tipo === 'largo') return '<label class="campo"><span>' + etiqueta + '</span><textarea class="entrada" id="' + id + '" data-k="' + esc(a.clave) + '" maxlength="4000"' + (String(a.valor || '').length > 400 ? ' rows="10"' : '') + '>' + esc(a.valor) + '</textarea></label>';
+      if (a.tipo === 'largo') return '<label class="campo"><span>' + etiqueta + '</span><textarea class="entrada" id="' + id + '" data-k="' + esc(a.clave) + '" maxlength="' + (a.clave === 'texto.contrato' ? 30000 : 4000) + '"' + (String(a.valor || '').length > 400 ? ' rows="' + (a.clave === 'texto.contrato' ? 20 : 10) + '"' : '') + '>' + esc(a.valor) + '</textarea></label>';
       var extra = a.tipo === 'euros' ? ' inputmode="decimal" placeholder="a consultar"' : a.tipo === 'num' ? ' inputmode="numeric"' : ' maxlength="120"';
       return '<label class="campo"><span>' + etiqueta + '</span><input class="entrada" id="' + id + '" data-k="' + esc(a.clave) + '" value="' + esc(a.valor) + '"' + extra + ' autocomplete="off"></label>';
     }

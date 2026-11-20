@@ -19,6 +19,9 @@
  *   DB.probarAviso()                      → { para, via, avisosProgramados, estado? }
  *   DB.regenerarCalendario()              → { eventos, estado }
  *   DB.importarCalendario()               → { importadas, omitidas, estado }
+ *   DB.enlaceContrato(id, importe)        → { id, enlace, estado }   (enlace para firmar el contrato desde el móvil)
+ *   DB.verContrato(id, importe)           → { firmado, documento, firma?, nombre?, … }
+ *   DB.leerFirma(enlace) / DB.enviarFirma(enlace, datos)   (página pública de firma)
  *   DB.anotar(id, tipo, texto)            → { id, estado }   (bitácora: nota, enlace enviado, presupuesto/contrato/liquidación enviados, fianza)
  *   DB.prepararFormulario(id)             → { id, enlace, estado, estado }   (crea el enlace del grupo si no existe)
  *   DB.aplicarFormulario(id)              → { id, estado }   (pasa a la reserva lo que envió el grupo)
@@ -67,6 +70,10 @@
     probarAviso: async function () { return llamar('probarAviso'); },
     regenerarCalendario: async function () { return llamar('regenerarCalendario'); },
     importarCalendario: async function () { return llamar('importarCalendario'); },
+    enlaceContrato: async function (id, importe) { return llamar('contratoEnlace', { id: id, importe: importe || 0 }); },
+    verContrato: async function (id, importe) { return llamar('contratoVer', { id: id, importe: importe }); },
+    leerFirma: async function (enlace) { return llamar('firmaLeer', {}, String(enlace || '')); },
+    enviarFirma: async function (enlace, datos) { return llamar('firmaEnviar', datos || {}, String(enlace || '')); },
     anotar: async function (id, tipo, texto) { return llamar('anotar', { id: id, tipo: tipo, texto: texto || '' }); },
     prepararFormulario: async function (id) { return llamar('formularioEnlace', { id: id }); },
     aplicarFormulario: async function (id) { return llamar('formularioAplicar', { id: id }); },

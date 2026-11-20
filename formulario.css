@@ -74,3 +74,25 @@ body.fg-final .fg-grupo, body.fg-final .fg-cab { border-bottom: 0; }
 .b-fin { display: block; width: 100%; max-width: 320px; height: 50px; margin: 24px auto 0; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
 .fin.adios { padding-top: 80px; }
 .fin.adios h2 { font-size: 22px; color: #85200C; }
+/* v2.0.0: firma del contrato */
+.doc-card { max-height: 55vh; overflow-y: auto; }
+.contrato-doc { font-family: 'Times New Roman', Georgia, serif; font-size: 15px; line-height: 1.45; color: #111; }
+.contrato-doc p { margin: 0 0 8px; text-align: justify; }
+.contrato-doc .ct-h { text-align: center; font-size: 15px; margin: 14px 0 8px; }
+.contrato-doc .ct-c { font-size: 15px; margin: 12px 0 4px; }
+.contrato-doc .ct-d { text-align: right; }
+.contrato-doc .hueco { background: #FFF4D6; padding: 0 2px; }
+.ct-firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; font-size: 14px; }
+.ct-firmas small { color: #555; }
+.ct-firma { display: block; width: 100%; height: 80px; border-bottom: 1px solid #333; margin: 4px 0 6px; }
+.pad { display: block; width: 100%; height: 170px; border: 2px dashed #B9AFA4; border-radius: 10px; background: #fff; touch-action: none; }
+.b-link { background: none; border: 0; color: #85200C; font-weight: 700; font-size: 14px; padding: 8px 4px; cursor: pointer; }
+.b-sec.b-fin { background: #fff; border: 1px solid #85200C; color: #85200C; }
+.imprimir-solo { display: none; }
+@media print {
+  body.fg-final #fg > *:not(main), #fgToast { display: none !important; }
+  .fin, .card.fin { display: none !important; }
+  .imprimir-solo { display: block !important; }
+  .contrato-doc .hueco { background: none; }
+  html, body { background: #fff !important; }
+}
