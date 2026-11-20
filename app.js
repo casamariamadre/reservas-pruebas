@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.6.2';
+  var VERSION = '1.6.3';
   var VERSION_FECHA = '20/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -347,13 +347,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       });
   }
 
-  /** Atajo «✓ Confirmar» para provisionales futuras: abre la reserva en edición ya marcada como Confirmada. */
+  /** Atajo «✓ Confirmar» (en la ficha) para provisionales futuras: abre la edición ya marcada como Confirmada. */
   function puedeConfirmar(r) { return r.estado === 'Provisional' && tipo(r) !== 'Bloqueo' && !esPasada(r); }
-  function botonConfirmar(r) { return puedeConfirmar(r) ? ' <span class="btn-confirmar" role="button" tabindex="0" data-confirmar="' + esc(r.id) + '">✓ Confirmar</span>' : ''; }
-  function atajoConfirmar(e) {
-    var c = e.target.closest('[data-confirmar]'); if (!c) return false;
-    e.stopPropagation(); ir('editar/' + encodeURIComponent(c.dataset.confirmar) + '?confirmar=1'); return true;
-  }
 
   function tarjetaReserva(r) {
     var f = aFecha(r.entrada);
@@ -362,10 +357,10 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       '<div class="info"><b>' + esc(r.grupo) + '</b>' +
       '<span class="sub">' + legible(r.entrada) + ' → ' + legible(r.salida) + (tipo(r) === 'Alojamiento' ? ' · ' + noches(r) + ' noche' + (noches(r) === 1 ? '' : 's') : '') + '</span><br>' +
       (tipo(r) !== 'Bloqueo' ? '<span class="sub">' + (r.personas || 0) + ' personas' + (r.responsable ? ' · ' + esc(r.responsable) : '') + '</span><br>' : '') +
-      etiquetas(r) + botonConfirmar(r) + '</div></button>';
+      etiquetas(r) + '</div></button>';
   }
   function enlazarTarjetas() {
-    $$('.reserva[data-id]').forEach(function (b) { b.onclick = function (e) { if (atajoConfirmar(e)) return; ir('reserva/' + encodeURIComponent(b.dataset.id)); }; });
+    $$('.reserva[data-id]').forEach(function (b) { b.onclick = function () { ir('reserva/' + encodeURIComponent(b.dataset.id)); }; });
   }
 
   // ---------------- Reservas: listas, relación y fines de semana ----------------
@@ -383,9 +378,9 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if ($('#rHasta')) $('#rHasta').onchange = function () { S.relHasta = this.value; pintarReservas(); };
     if ($('#fTodos')) $('#fTodos').onchange = function () { S.findesTodos = this.checked; pintarReservas(); };
     if ($('#rPdf')) $('#rPdf').onclick = function () { document.body.classList.add('imprimiendo'); window.print(); setTimeout(function () { document.body.classList.remove('imprimiendo'); }, 500); };
-    if ($('#rWord')) $('#rWord').onclick = exportarWord;
+    if ($('#rCopiar')) $('#rCopiar').onclick = pedirCopia;
     $$('.findes [data-f]').forEach(function (b) { b.onclick = function () { ir('nueva?fecha=' + b.dataset.f + '&salida=' + b.dataset.s); }; });
-    $$('.rel-item[data-id]').forEach(function (b) { b.onclick = function (e) { if (atajoConfirmar(e)) return; ir('reserva/' + encodeURIComponent(b.dataset.id)); }; });
+    $$('.rel-item[data-id]').forEach(function (b) { b.onclick = function () { ir('reserva/' + encodeURIComponent(b.dataset.id)); }; });
     enlazarTarjetas();
   }
 
@@ -401,10 +396,11 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
 
   /** Relación cronológica con el formato habitual de la casa, mejorado. */
-  function datosRelacion() {
+  function datosRelacion(d1, d2) {
     var rango = S.relModo === 'rango';
     // «Próximas y en curso»: las que aún no han terminado (salida hoy o después). «Entre fechas» permite ver las pasadas.
     var desde = rango ? (S.relDesde || '') : hoyTxt(), hasta = rango && S.relHasta ? S.relHasta : '9999-12-31';
+    if (d1 != null) { desde = d1; hasta = d2; }
     var lista = ordenar(reservas().filter(function (r) { return r.salida >= desde && r.entrada <= hasta; }));
     var grupos = [], actual = null;
     lista.forEach(function (r) {
@@ -434,7 +430,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       return '<h4 class="rel-mes">' + g.mes + ' <small>' + g.anio + '</small></h4>' + g.items.map(function (r) {
         var l = lineaRelacion(r);
         return '<button class="rel-item' + (l.cancelada ? ' rel-cancelada' : '') + '" data-id="' + esc(l.id) + '">' +
-          '<span class="rel-dias">' + l.dias + ':</span> <span class="rel-tit' + (l.negrita ? ' negrita' : '') + '">' + l.titulo + '</span>' + l.tipo + l.estado + botonConfirmar(r) +
+          '<span class="rel-dias">' + l.dias + ':</span> <span class="rel-tit' + (l.negrita ? ' negrita' : '') + '">' + l.titulo + '</span>' + l.tipo + l.estado +
           (l.detalle ? '<br><span class="rel-det">' + l.detalle + '</span>' : '') +
           (l.obs ? '<br><span class="rel-obs">' + l.obs + '</span>' : '') + '</button>';
       }).join('');
@@ -445,7 +441,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       '<button data-m="rango" class="' + (rango ? 'activo' : '') + '">Entre fechas</button></div>' +
       (rango ? '<div class="dos" style="margin-top:10px"><label class="campo"><span>Desde</span><input class="entrada" id="rDesde" type="date" value="' + esc(S.relDesde) + '"></label>' +
         '<label class="campo"><span>Hasta</span><input class="entrada" id="rHasta" type="date" value="' + esc(S.relHasta) + '"></label></div>' : '') +
-      '<div class="fila-btns" style="margin-top:6px"><button class="btn sec" id="rPdf">PDF / Imprimir</button><button class="btn sec" id="rWord">Word</button></div></div>' +
+      '<div class="fila-btns" style="margin-top:6px"><button class="btn sec" id="rPdf">PDF / Imprimir</button><button class="btn sec" id="rCopiar">Copiar reservas</button></div></div>' +
       '<div class="tarjeta" id="relacion"><div class="rel-cab">Lista de reservas · ' + esc(C.NOMBRE_CASA || '') + '<small>' + esc(textoRango()) + '</small></div>' +
       (cuerpo || '<div class="vacio">No hay reservas.</div>') + '</div>';
   }
@@ -454,27 +450,72 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if (!S.relDesde && !S.relHasta) return 'Todas las reservas';
     return (S.relDesde ? 'Desde ' + legible(S.relDesde) : 'Hasta') + (S.relDesde && S.relHasta ? ' hasta ' : ' ') + (S.relHasta ? legible(S.relHasta) : '');
   }
-  function exportarWord() {
-    var grupos = datosRelacion();
-    var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8">' +
-      '<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#222}h1{font-family:Georgia,serif;color:#85200C;font-size:16pt;margin:0 0 4pt}' +
-      'h2{font-size:12pt;color:#89588B;margin:18pt 0 6pt;border-bottom:1px solid #DAD6E4}p{margin:0 0 14pt;line-height:1.35}.d{color:#666;font-size:9.5pt}' +
-      '.o{color:#666;font-size:9.5pt;font-style:italic}.c{text-decoration:line-through;color:#999}.e{font-size:8.5pt;font-weight:bold}</style></head><body>' +
-      '<h1>Lista de reservas · ' + esc(C.NOMBRE_CASA || '') + '</h1><p class="d">' + esc(textoRango()) + ' · generada el ' + legible(hoyTxt()) + '</p>' +
-      grupos.map(function (g) {
-        return '<h2>' + g.mes + ' ' + g.anio + '</h2>' + g.items.map(function (r) {
-          var l = lineaRelacion(r);
-          var est = r.estado === 'Cancelada' ? ' <span class="e" style="color:#B42318">CANCELADA</span>' : (r.estado === 'Provisional' && tipo(r) !== 'Bloqueo') ? ' <span class="e" style="color:#B7791F">PROVISIONAL</span>' : '';
-          return '<p><span' + (l.cancelada ? ' class="c"' : '') + '>&#9632; <b>' + l.dias + ':</b> ' + (l.negrita ? '<b>' + l.titulo + '</b>' : l.titulo) +
-            (tipo(r) === 'Día / sala' ? ' (sin alojamiento)' : '') + '</span>' + est +
-            (l.detalle ? '<br><span class="d">' + l.detalle.replace(/<[^>]+>/g, '') + '</span>' : '') + (l.obs ? '<br><span class="o">' + l.obs + '</span>' : '') + '</p>';
-        }).join('');
-      }).join('') + '</body></html>';
-    var blob = new Blob(['﻿', html], { type: 'application/msword' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'Lista_reservas_' + hoyTxt() + '.doc';
-    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    toast('Documento de Word descargado');
+  /** «Copiar reservas»: primero se elige el periodo; luego se copia la lista con formato (para pegar en Word, correo…). */
+  function pedirCopia() {
+    var rango = S.relModo === 'rango';
+    var d1 = rango && S.relDesde ? S.relDesde : hoyTxt();
+    var d2 = rango && S.relHasta ? S.relHasta : sumaDias(d1, 90);
+    modal('<p style="margin-bottom:8px"><b>Copiar reservas</b></p><p class="sub" style="margin:0 0 10px">Elige el periodo. Después podrás pegar la lista, con su formato, en Word, en un correo o en otro programa.</p>' +
+      '<div class="dos"><label class="campo"><span>Desde</span><input class="entrada" id="cDesde" type="date" value="' + esc(d1) + '"></label>' +
+      '<label class="campo"><span>Hasta</span><input class="entrada" id="cHasta" type="date" value="' + esc(d2) + '"></label></div>' +
+      '<p class="error-txt" id="cError"></p>' +
+      '<div class="fila-btns" style="margin-top:8px"><button class="btn borde" data-r="0">Cancelar</button><button class="btn" data-r="1">Copiar</button></div>',
+      function (e, cerrar) {
+        var b = e.target.closest('[data-r]'); if (!b) return;
+        if (b.dataset.r === '0') return cerrar();
+        var a = $('#cDesde').value, z = $('#cHasta').value;
+        if (!a || !z) { $('#cError').textContent = 'Indica las dos fechas.'; return; }
+        if (z < a) { $('#cError').textContent = '«Hasta» debe ser posterior a «Desde».'; return; }
+        var n = copiarReservas(a, z);
+        cerrar();
+        if (n === false) toast('Este navegador no deja copiar. Usa «PDF / Imprimir».', true);
+        else toast(n ? 'Copiadas ' + n + (n === 1 ? ' reserva' : ' reservas') + '. Ya puedes pegarlas.' : 'No hay reservas en ese periodo.', !n);
+      });
+  }
+  function copiarReservas(desde, hasta) {
+    var grupos = datosRelacion(desde, hasta), n = 0;
+    var st = { t: 'font-family:Georgia,serif;color:#85200C;font-size:16pt;font-weight:bold;margin:0 0 4pt',
+      m: 'font-family:Calibri,Arial,sans-serif;font-size:12pt;font-weight:bold;color:#89588B;margin:14pt 0 4pt;border-bottom:1px solid #DAD6E4',
+      p: 'font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#222;margin:0 0 10pt;line-height:1.35',
+      d: 'color:#666;font-size:9.5pt', o: 'color:#666;font-size:9.5pt;font-style:italic' };
+    var periodo = 'Del ' + legible(desde) + ' al ' + legible(hasta);
+    var html = '<div><p style="' + st.t + '">Lista de reservas · ' + esc(C.NOMBRE_CASA || '') + '</p><p style="' + st.p + ';' + st.d + '">' + periodo + '</p>';
+    var txt = 'LISTA DE RESERVAS · ' + (C.NOMBRE_CASA || '') + '\n' + periodo + '\n';
+    grupos.forEach(function (g) {
+      html += '<p style="' + st.m + '">' + g.mes + ' ' + g.anio + '</p>';
+      txt += '\n' + g.mes.toUpperCase() + ' ' + g.anio + '\n';
+      g.items.forEach(function (r) {
+        n++;
+        var l = lineaRelacion(r), det = l.detalle.replace(/<[^>]+>/g, '');
+        var est = r.estado === 'Cancelada' ? 'CANCELADA' : (r.estado === 'Provisional' && tipo(r) !== 'Bloqueo') ? 'PROVISIONAL' : '';
+        html += '<p style="' + st.p + '"><span' + (l.cancelada ? ' style="text-decoration:line-through;color:#999"' : '') + '>&#9632; <b>' + l.dias + ':</b> ' +
+          (l.negrita ? '<b>' + l.titulo + '</b>' : l.titulo) + (tipo(r) === 'Día / sala' ? ' (sin alojamiento)' : '') + '</span>' +
+          (est ? ' <b style="font-size:8.5pt;color:' + (est === 'CANCELADA' ? '#B42318' : '#B7791F') + '">' + est + '</b>' : '') +
+          (det ? '<br><span style="' + st.d + '">' + det + '</span>' : '') + (l.obs ? '<br><span style="' + st.o + '">' + l.obs + '</span>' : '') + '</p>';
+        var plano = function (h) { var x = document.createElement('div'); x.innerHTML = h; return x.textContent; };
+        txt += '■ ' + l.dias + ': ' + plano(l.titulo) + (tipo(r) === 'Día / sala' ? ' (sin alojamiento)' : '') + (est ? ' · ' + est : '') + '\n' +
+          (det ? '   ' + plano(det) + '\n' : '') + (l.obs ? '   ' + plano(l.obs) + '\n' : '');
+      });
+    });
+    html += '</div>';
+    if (!n) return 0;
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([txt], { type: 'text/plain' }) })])
+          .catch(function () { if (!copiaAntigua(html)) toast('No se pudo copiar. Usa «PDF / Imprimir».', true); });
+        return n;
+      }
+      return copiaAntigua(html) ? n : false;
+    } catch (e) { return copiaAntigua(html) ? n : false; }
+  }
+  function copiaAntigua(html) {
+    var d = document.createElement('div');
+    d.contentEditable = 'true'; d.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    d.innerHTML = html; document.body.appendChild(d);
+    var rg = document.createRange(); rg.selectNodeContents(d);
+    var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+    sel.removeAllRanges(); d.remove(); return ok;
   }
 
   /** Próximos fines de semana: libres, con provisionales, ocupados. */
@@ -547,7 +588,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       (!bloq && r.estado !== 'Cancelada' ? '<div class="tarjeta"><h2>Hoja de estancia</h2><p class="sub" style="margin:-4px 0 10px">' + resumenServicios(r) + '</p>' +
         '<div class="fila-btns"><button class="btn sec" id="dServ">Servicios y datos</button><button class="btn sec" id="dHoja">Ver hoja de estancia</button></div></div>' : '') +
       '<div class="fila-btns">' +
-      (r.estado !== 'Cancelada' ? (tel ? '<a class="btn sec" href="tel:' + esc(tel) + '">Llamar</a>' : '') + '<button class="btn" id="dEditar">Editar</button>' : '') +
+      (r.estado !== 'Cancelada' ? (tel ? '<a class="btn sec" href="tel:' + esc(tel) + '">Llamar</a>' : '') + (puedeConfirmar(r) ? '<button class="btn confirmar" id="dConfirmar">✓ Confirmar</button>' : '') + '<button class="btn" id="dEditar">Editar</button>' : '') +
       '</div>' +
       '<div class="fila-btns" style="margin-top:10px">' +
       (r.estado !== 'Cancelada' ? '<button class="btn peligro" id="dCancelar">Cancelar reserva</button>' : '') +
@@ -557,6 +598,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         ? ' · Modificada por ' + esc(r.modificadoPor) + entreParen(marcaLegible(r.modificadoEl)) : '') + '</p>';
     enlazarVolver();
     if ($('#dEditar')) $('#dEditar').onclick = function () { ir('editar/' + encodeURIComponent(r.id)); };
+    if ($('#dConfirmar')) $('#dConfirmar').onclick = function () { ir('editar/' + encodeURIComponent(r.id) + '?confirmar=1'); };
     if ($('#dServ')) $('#dServ').onclick = function () { ir('servicios/' + encodeURIComponent(r.id)); };
     if ($('#dHoja')) $('#dHoja').onclick = function () { ir('hoja/' + encodeURIComponent(r.id) + '?modo=presupuesto'); };
     function accion(nombre, texto, boton, ok) {
@@ -1168,6 +1210,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   function pintarAdmin() {
     if (!S.datos.esAdmin) { vista.innerHTML = botonVolver() + '<div class="vacio">Solo los administradores pueden ver esta pantalla.</div>'; enlazarVolver(); return; }
     var cfg = S.datos.config || [], grupos = [], por = {}, orig = {};
+    var abiertos = lsGet('adAbiertos') || {};
     cfg.forEach(function (a) { orig[a.clave] = a.valor; if (!por[a.grupo]) { por[a.grupo] = []; grupos.push(a.grupo); } por[a.grupo].push(a); });
     function campo(a) {
       var id = 'ad_' + a.clave.replace(/\W/g, '_');
@@ -1178,14 +1221,23 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     }
     vista.innerHTML = botonVolver() +
       '<div class="aviso-suave">Solo para administradores. Los cambios valen para los documentos que se hagan a partir de ahora; los ya enviados no cambian. Un precio vacío sale como «a consultar».</div>' +
-      grupos.map(function (g) { return '<div class="tarjeta"><h2>' + esc(g) + '</h2>' + por[g].map(campo).join('') + '</div>'; }).join('') +
+      grupos.map(function (g) {
+        return '<details class="tarjeta ad-grupo" data-g="' + esc(g) + '"' + (abiertos[g] ? ' open' : '') + '><summary><span class="ad-tit">' + esc(g) + '</span>' +
+          '<span class="ad-n">' + por[g].length + '</span><span class="ad-punto" title="Cambios sin guardar"></span></summary>' + por[g].map(campo).join('') + '</details>';
+      }).join('') +
       '<div class="form-espacio"></div><div class="pie-form"><div class="total" id="adEstado">Sin cambios</div><button class="btn" id="adGuardar">Guardar cambios</button></div>';
     function cambios() {
       var v = {};
       $$('[data-k]').forEach(function (el) { var k = el.dataset.k; if (String(el.value).trim() !== String(orig[k] == null ? '' : orig[k]).trim()) v[k] = el.value; });
       return v;
     }
-    vista.oninput = function () { var est = $('#adEstado'); if (!est) return; var n = Object.keys(cambios()).length; est.textContent = n ? n + (n === 1 ? ' cambio sin guardar' : ' cambios sin guardar') : 'Sin cambios'; };
+    vista.oninput = function () {
+      var est = $('#adEstado'); if (!est) return;
+      var v = cambios(), n = Object.keys(v).length;
+      est.textContent = n ? n + (n === 1 ? ' cambio sin guardar' : ' cambios sin guardar') : 'Sin cambios';
+      $$('.ad-grupo').forEach(function (d) { d.classList.toggle('con-cambios', $$('[data-k]', d).some(function (el) { return v.hasOwnProperty(el.dataset.k); })); });
+    };
+    $$('.ad-grupo').forEach(function (d) { d.addEventListener('toggle', function () { var a = lsGet('adAbiertos') || {}; a[d.dataset.g] = d.open; lsSet('adAbiertos', a); }); });
     enlazarVolver();
     $('#adGuardar').onclick = function () {
       var v = cambios(), n = Object.keys(v).length;
@@ -1217,7 +1269,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       '<div class="tarjeta"><h2>Versión</h2>' +
       '<div class="dato"><span>App</span><span><b>' + VERSION + '</b> · ' + VERSION_FECHA + '</span></div>' +
       '<div class="dato"><span>Servidor (puente)</span><span><b>' + esc(aj.version || '—') + '</b></span></div>' +
-      '<div class="dato"><span>Datos comprobados</span><span>' + (S.ultimaCarga ? new Date(S.ultimaCarga).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—') + '</span></div></div>' +
+      '<div class="dato"><span>Datos comprobados</span><span>' + (S.ultimaCarga ? new Date(S.ultimaCarga).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—') + '</span></div>' +
+      '<p class="sub" style="margin:8px 0 0;font-size:11.5px">Pantalla ' + screen.width + '×' + screen.height + ' · ventana ' + window.innerWidth + '×' + window.innerHeight + ' · app ' + Math.round($('#app').getBoundingClientRect().height) + (window.navigator.standalone ? ' · instalada' : '') + '</p></div>' +
       '<button class="btn peligro ancho" id="aSalir">Cerrar sesión en este móvil</button>';
     function accion(nombre, texto, fmt) {
       return function () {
@@ -1250,6 +1303,20 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if (b.dataset.ir === 'calendario') S.mes = null;
     ir(b.dataset.ir);
   };
+  // iPhone con la app instalada: el sistema da a la página menos alto que la pantalla (queda una franja abajo).
+  // Se ajusta la app al alto real de la pantalla, también al girar el móvil.
+  function ajustarAlto() {
+    var ios = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var instalada = window.navigator.standalone === true;
+    var app = $('#app'); if (!app) return;
+    if (!ios || !instalada) { app.style.height = ''; app.style.bottom = ''; return; }
+    var vertical = window.innerHeight >= window.innerWidth;
+    var alto = vertical ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    app.style.bottom = 'auto'; app.style.height = alto + 'px';
+  }
+  ajustarAlto();
+  window.addEventListener('resize', ajustarAlto);
+  window.addEventListener('orientationchange', function () { setTimeout(ajustarAlto, 300); });
   $('#btnRecargar').onclick = function () { recargar(); };
   window.addEventListener('hashchange', pintar);
   // Al volver a la app (si han pasado más de 2 minutos): comprobar con el reloj y luego mostrar.
