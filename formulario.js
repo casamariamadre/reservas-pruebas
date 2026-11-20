@@ -25,10 +25,10 @@
   if (!TOKEN) return mensaje('Falta el enlace', 'Abra el formulario desde el enlace que le envió la Casa.');
   DB.leerFormulario(TOKEN).then(function (d) {
     INFO = d;
+    if (!d.abierto) return mensaje('Formulario no disponible', d.motivo || 'Para cualquier cambio, contacte con la Casa.');
     var r = d.reserva;
     if (!r) return mensaje('Enlace no válido', 'Pida a la Casa un enlace nuevo.');
     $('#fgGrupo').textContent = r.grupo + ' · ' + legible(r.entrada) + ' a ' + legible(r.salida);
-    if (!d.abierto) return mensaje('Formulario no disponible', d.motivo + (d.enviadoEl ? ' (Recibimos su formulario el ' + legible(d.enviadoEl.slice(0, 10)) + '.)' : ''));
     preparar();
     pintar();
   }).catch(function (e) {

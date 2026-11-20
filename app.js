@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.7.2';
+  var VERSION = '1.7.3';
   var VERSION_FECHA = '20/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -1222,8 +1222,9 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   // ---------------- 1.7.0 · Formulario del grupo (lado del gestor) ----------------
   function marcaCorta(m) { return m ? legible(String(m).slice(0, 10)) + (String(m).length > 10 ? ' ' + String(m).slice(11, 16) : '') : ''; }
   function tarjetaFormulario(r) {
-    var f = r.formulario, e = f ? f.estado : '';
-    var txt = !f ? 'Aún no se ha enviado el enlace al grupo.' :
+    var f = r.formulario, e = f ? f.estado : '', fuera = hoyTxt() > r.entrada;
+    var txt = fuera ? (f && f.datos ? 'Plazo terminado (el día de entrada). Recibido el ' + marcaCorta(f.enviadoEl) + (e === 'Aplicado' ? ', aplicado a la reserva.' : '.') : 'Plazo terminado (el día de entrada): el enlace ya no se puede usar.') :
+      !f ? 'Aún no se ha enviado el enlace al grupo.' :
       e === 'Pendiente' ? 'Enlace creado. Esperando a que el grupo lo rellene' + (f.enviadoEl ? ' (último envío: ' + marcaCorta(f.enviadoEl) + ')' : '') + '.' :
       e === 'Recibido' ? '<b>Recibido el ' + marcaCorta(f.enviadoEl) + '.</b> Pendiente de revisar y aplicar.' :
       e === 'Aplicado' ? 'Aplicado a la reserva (recibido el ' + marcaCorta(f.enviadoEl) + ').' :
@@ -1231,10 +1232,10 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var b = [];
     if (e === 'Recibido') b.push('<button class="btn" id="fRevisar">Revisar y aplicar</button>');
     else if (f && f.datos) b.push('<button class="btn sec" id="fRevisar">Ver lo recibido</button>');
-    if (e !== 'Cerrado') b.push('<button class="btn sec" id="fEnviar">' + (f ? 'Enviar el enlace otra vez' : 'Enviar enlace al grupo') + '</button>');
+    if (e !== 'Cerrado' && !fuera) b.push('<button class="btn sec" id="fEnviar">' + (f ? 'Enviar el enlace otra vez' : 'Enviar enlace al grupo') + '</button>');
     return '<div class="tarjeta"><h2>Formulario del grupo</h2><p class="sub" style="margin:-4px 0 10px">' + txt + '</p>' +
       '<div class="fila-btns">' + b.join('') + '</div>' +
-      (f ? '<p class="sub" style="margin:10px 0 0;font-size:13px"><button class="enlace" id="fAbrir">' + (e === 'Cerrado' ? 'Volver a abrir el formulario' : 'Cerrar el formulario') + '</button></p>' : '') + '</div>';
+      (f && !fuera ? '<p class="sub" style="margin:10px 0 0;font-size:13px"><button class="enlace" id="fAbrir">' + (e === 'Cerrado' ? 'Volver a abrir el formulario' : 'Cerrar el formulario') + '</button></p>' : '') + '</div>';
   }
   function enlazarFormulario(r) {
     if ($('#fRevisar')) $('#fRevisar').onclick = function () { ir('formulario/' + encodeURIComponent(r.id)); };
