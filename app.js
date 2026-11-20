@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.7.0';
+  var VERSION = '1.7.1';
   var VERSION_FECHA = '20/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -885,7 +885,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var sv = r.servicios || [];
     if (!sv.length) return 'Aún no hay servicios apuntados. Rellénalos para preparar el presupuesto.';
     var c = { Desayuno: 0, Comida: 0, Cena: 0, Noche: 0 };
-    sv.forEach(function (x) { if (c[x.servicio] != null) c[x.servicio] += (x.adultos || 0) + (x.ninos || 0); });
+    sv.forEach(function (x) { if (c[x.servicio] != null) c[x.servicio] += (x.adultos || 0) + (x.ninos || 0) + (x.bebes || 0); });
     return c.Noche + ' pernoctaciones · ' + c.Desayuno + ' desayunos · ' + c.Comida + ' comidas · ' + c.Cena + ' cenas';
   }
 
@@ -900,7 +900,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     function num(idc, v, lbl) { return '<label class="sv-num"><span>' + lbl + '</span><input class="entrada" type="number" inputmode="numeric" min="0" max="999" id="' + idc + '" value="' + (v ? v : '') + '" placeholder="0"></label>'; }
     function filaComida(t, nombre) {
       var x = m[t + '|' + nombre] || {};
-      return '<div class="sv-fila"><b>' + nombre + '</b>' + num('a_' + t + '_' + nombre, x.adultos, 'Adultos') + num('n_' + t + '_' + nombre, x.ninos, 'Niños') + '</div>';
+      return '<div class="sv-fila"><b>' + nombre + '</b>' + num('a_' + t + '_' + nombre, x.adultos, 'Adultos') + num('n_' + t + '_' + nombre, x.ninos, 'Niños') +
+        num('b_' + t + '_' + nombre, x.bebes, '0 a ' + (cfg('edad.gratis_hasta') || 4)) + '</div>';
     }
     var bloquesDias = dias.map(function (t, i) {
       var ultimo = i === dias.length - 1;
@@ -929,11 +930,11 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     enlazarVolver();
     function v(idc) { var e = document.getElementById(idc); return e ? Math.max(0, Math.floor(+e.value || 0)) : 0; }
     function leer() {
-      var out = [], bebes = v('pB');
+      var out = [];
       dias.forEach(function (t) {
         COMIDAS.concat([['Noche']]).forEach(function (c) {
-          var a = v('a_' + t + '_' + c[0]), n = v('n_' + t + '_' + c[0]);
-          if (a || n) out.push({ fecha: t, servicio: c[0], adultos: a, ninos: n, bebes: bebes });
+          var a = v('a_' + t + '_' + c[0]), n = v('n_' + t + '_' + c[0]), b = v('b_' + t + '_' + c[0]);
+          if (a || n || b) out.push({ fecha: t, servicio: c[0], adultos: a, ninos: n, bebes: b });
         });
         SALAS.forEach(function (sa) { var e = document.getElementById('s_' + t + '_' + sa); if (e && e.checked) out.push({ fecha: t, servicio: sa, adultos: 1, ninos: 0, bebes: 0 }); });
       });
@@ -947,15 +948,15 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     vista.oninput = function () { if ($('#svTotal')) total(); };
     $$('.sv-salas input').forEach(function (e) { e.onchange = function () { e.parentNode.classList.toggle('activo', e.checked); total(); }; });
     $('#svAuto').onclick = function () {
-      var a = v('pA'), n = v('pN');
+      var a = v('pA'), n = v('pN'), b = v('pB');
       dias.forEach(function (t, i) {
         COMIDAS.forEach(function (c) {
           var dentro = (t > r.entrada || c[1] >= r.horaEntrada) && (t < r.salida || c[1] < r.horaSalida);
-          var ea = document.getElementById('a_' + t + '_' + c[0]), en = document.getElementById('n_' + t + '_' + c[0]);
-          ea.value = dentro && a ? a : ''; en.value = dentro && n ? n : '';
+          var ea = document.getElementById('a_' + t + '_' + c[0]), en = document.getElementById('n_' + t + '_' + c[0]), eb = document.getElementById('b_' + t + '_' + c[0]);
+          ea.value = dentro && a ? a : ''; en.value = dentro && n ? n : ''; eb.value = dentro && b ? b : '';
         });
-        var na = document.getElementById('a_' + t + '_Noche'), nn = document.getElementById('n_' + t + '_Noche');
-        if (na) { na.value = a || ''; nn.value = n || ''; }
+        var na = document.getElementById('a_' + t + '_Noche'), nn = document.getElementById('n_' + t + '_Noche'), nb = document.getElementById('b_' + t + '_Noche');
+        if (na) { na.value = a || ''; nn.value = n || ''; nb.value = b || ''; }
       });
       total(); toast('Rellenado. Revisa los días y pulsa Guardar.');
     };
@@ -970,7 +971,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
 
   function calcularHoja(r) {
     var sv = r.servicios || [], suma = {};
-    sv.forEach(function (x) { var k = x.servicio; suma[k] = suma[k] || { a: 0, n: 0, dias: 0 }; suma[k].a += x.adultos; suma[k].n += x.ninos; suma[k].dias++; });
+    sv.forEach(function (x) { var k = x.servicio; suma[k] = suma[k] || { a: 0, n: 0, b: 0, dias: 0 }; suma[k].a += x.adultos; suma[k].n += x.ninos; suma[k].b += (x.bebes || 0); suma[k].dias++; });
     var lineas = [];
     function lin(txt, u, precio) { if (u > 0) lineas.push({ txt: txt, u: u, p: precio, imp: precio == null ? null : Math.round(u * precio * 100) / 100 }); }
     [['Desayuno', 'desayuno', 'Desayuno'], ['Comida', 'comida', 'Comida'], ['Cena', 'cena', 'Cena'], ['Noche', 'noche', 'Alojamiento (noche)']].forEach(function (c) {
@@ -980,6 +981,10 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     [['Desayuno', 'desayuno', 'Desayuno'], ['Comida', 'comida', 'Comida'], ['Cena', 'cena', 'Cena'], ['Noche', 'noche', 'Alojamiento (noche)']].forEach(function (c) {
       var x = suma[c[0]] || { a: 0, n: 0 };
       lin(c[2] + ' · niño', x.n, cfgNum('precio.nino.' + c[1]));
+    });
+    [['Desayuno', 'Desayuno'], ['Comida', 'Comida'], ['Cena', 'Cena'], ['Noche', 'Alojamiento (noche)']].forEach(function (c) {
+      var x = suma[c[0]] || { b: 0 };
+      lin(c[1] + ' · 0 a ' + (cfg('edad.gratis_hasta') || 4) + ' años (gratis)', x.b, 0);
     });
     [['Salón', 'salon'], ['Salas', 'salas'], ['Capilla', 'capilla'], ['Garaje', 'garaje']].forEach(function (c) {
       var x = suma[c[0]]; if (x) lin(c[0] + ' (días)', x.dias, cfgNum('precio.' + c[1]));
@@ -994,8 +999,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var liq = modo === 'liquidacion', m = mapaServ(r), g = r.grupoDatos || {}, c = calcularHoja(r);
     var gratis = +cfg('edad.gratis_hasta') || 4, adulto = +cfg('edad.adulto_desde') || 9;
     var dias = diasDe(r), aloj = tipo(r) === 'Alojamiento';
-    var adMax = 0, niMax = 0; (r.servicios || []).forEach(function (x) { if (SALAS.indexOf(x.servicio) < 0) { adMax = Math.max(adMax, x.adultos); niMax = Math.max(niMax, x.ninos); } });
-    function celda(t, sv) { var x = m[t + '|' + sv]; return x && (x.adultos || x.ninos) ? x.adultos + (x.ninos ? ' <small>+ ' + x.ninos + ' niños</small>' : '') : '—'; }
+    var adMax = 0, niMax = 0, beMax = 0; (r.servicios || []).forEach(function (x) { if (SALAS.indexOf(x.servicio) < 0) { adMax = Math.max(adMax, x.adultos); niMax = Math.max(niMax, x.ninos); beMax = Math.max(beMax, x.bebes || 0); } });
+    function celda(t, sv) { var x = m[t + '|' + sv]; return x && (x.adultos || x.ninos || x.bebes) ? x.adultos + (x.ninos ? ' <small>+ ' + x.ninos + ' niños</small>' : '') + (x.bebes ? ' <small>+ ' + x.bebes + ' de 0-' + gratis + '</small>' : '') : '—'; }
     var filas = dias.map(function (t) {
       var salas = SALAS.filter(function (sa) { return m[t + '|' + sa]; }).join(', ');
       return '<tr><td class="l"><b>' + esc(diaCorto(t)) + '</b></td>' + COMIDAS.map(function (cm) { return '<td>' + celda(t, cm[0]) + '</td>'; }).join('') +
@@ -1013,7 +1018,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       '<div><small>RESPONSABLE</small>' + esc(r.responsable || '—') + (r.telefono ? ' · ' + esc(r.telefono) : '') + (r.email ? ' · ' + esc(r.email) : '') + '</div>' +
       '<div><small>ENTRADA</small>' + esc(diaSemana(r.entrada)) + ', ' + esc(r.horaEntrada) + '</div>' +
       '<div><small>SALIDA</small>' + esc(diaSemana(r.salida)) + ', ' + esc(r.horaSalida) + '</div>' +
-      '<div><small>PERSONAS</small>' + adMax + ' adultos' + (niMax ? ' · ' + niMax + ' niños (' + (gratis + 1) + ' a ' + (adulto - 1) + ' años)' : '') + '</div>' +
+      '<div><small>PERSONAS</small>' + adMax + ' adultos' + (niMax ? ' · ' + niMax + ' niños (' + (gratis + 1) + ' a ' + (adulto - 1) + ' años)' : '') + (beMax ? ' · ' + beMax + ' de 0 a ' + gratis + ' años' : '') + '</div>' +
       '<div><small>ENTIDAD Y CIF</small>' + (esc(g.entidad) || '—') + (g.cif ? ' · ' + esc(g.cif) : '') + (g.direccion ? '<br>' + esc(g.direccion) : '') + '</div></div>' +
       (r.servicios && r.servicios.length ? '' : '<p class="hd-aviso">Todavía no hay servicios apuntados para esta reserva.</p>') +
       '<h4>Servicios por día</h4><table class="hd-tabla"><tr><th class="l">Día</th>' + COMIDAS.map(function (cm) { return '<th>' + cm[0] + '</th>'; }).join('') + (aloj ? '<th>Noche</th>' : '') + '<th class="l">Salas</th></tr>' + filas + '</table>' +
@@ -1079,10 +1084,10 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } },
         views: [{ showGridLines: false }]
       });
-      // Columnas: Día + (adultos, niños) por servicio + Salas
+      // Columnas: Día + (adultos, niños, 0 a 4) por servicio + Salas
       var serv = COMIDAS.map(function (x) { return x[0]; }); if (aloj) serv.push('Noche');
-      var nCol = 2 + serv.length * 2; // A = día, luego pares, última = salas
-      var anchos = [16]; serv.forEach(function () { anchos.push(9, 9); }); anchos.push(22); anchos[nCol - 2] = Math.max(anchos[nCol - 2], 12); anchos[nCol - 3] = Math.max(anchos[nCol - 3], 10);
+      var K = 3, nCol = 2 + serv.length * K; // A = día, luego grupos de 3, última = salas
+      var anchos = [16]; serv.forEach(function () { anchos.push(8, 8, 7); }); anchos.push(22); anchos[nCol - 2] = Math.max(anchos[nCol - 2], 12); anchos[nCol - 3] = Math.max(anchos[nCol - 3], 10);
       ws.columns = anchos.map(function (w) { return { width: w }; });
       function L(n) { var s = ''; n++; while (n > 0) { var k = (n - 1) % 26; s = String.fromCharCode(65 + k) + s; n = Math.floor((n - 1) / 26); } return s; } // 0 → A
       var UL = L(nCol - 1);
@@ -1102,12 +1107,12 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       for (var k = 0; k < nCol; k++) borde(ws.getCell(L(k) + '3'), true);
       fila = 5;
       // Datos del grupo
-      var adMax = 0, niMax = 0; (r.servicios || []).forEach(function (x) { if (SALAS.indexOf(x.servicio) < 0) { adMax = Math.max(adMax, x.adultos); niMax = Math.max(niMax, x.ninos); } });
+      var adMax = 0, niMax = 0, beMax = 0; (r.servicios || []).forEach(function (x) { if (SALAS.indexOf(x.servicio) < 0) { adMax = Math.max(adMax, x.adultos); niMax = Math.max(niMax, x.ninos); beMax = Math.max(beMax, x.bebes || 0); } });
       [['Grupo', r.grupo],
        ['Responsable', [r.responsable, r.telefono, r.email].filter(Boolean).join(' · ') || '—'],
        ['Entrada', diaSemana(r.entrada) + ', ' + r.horaEntrada],
        ['Salida', diaSemana(r.salida) + ', ' + r.horaSalida],
-       ['Personas', adMax + ' adultos' + (niMax ? ' · ' + niMax + ' niños (' + (gratis + 1) + ' a ' + (adulto - 1) + ' años)' : '')],
+       ['Personas', adMax + ' adultos' + (niMax ? ' · ' + niMax + ' niños (' + (gratis + 1) + ' a ' + (adulto - 1) + ' años)' : '') + (beMax ? ' · ' + beMax + ' de 0 a ' + gratis + ' años' : '')],
        ['Entidad y CIF', [g.entidad, g.cif].filter(Boolean).join(' · ') || '—'],
        ['Dirección', g.direccion || '—']
       ].forEach(function (d) {
@@ -1121,7 +1126,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       titulo('Servicios por día');
       var f1 = fila, f2 = fila + 1;
       ws.getCell('A' + f1).value = 'Día'; ws.mergeCells('A' + f1 + ':A' + f2);
-      serv.forEach(function (s, i) { var col = 1 + i * 2; ws.getCell(L(col) + f1).value = s; unir(f1, col, col + 1); ws.getCell(L(col) + f2).value = 'Adultos'; ws.getCell(L(col + 1) + f2).value = 'Niños'; });
+      serv.forEach(function (s, i) { var col = 1 + i * K; ws.getCell(L(col) + f1).value = s; unir(f1, col, col + K - 1); ws.getCell(L(col) + f2).value = 'Adultos'; ws.getCell(L(col + 1) + f2).value = 'Niños'; ws.getCell(L(col + 2) + f2).value = '0-' + gratis; });
       ws.getCell(UL + f1).value = 'Salas'; ws.mergeCells(UL + f1 + ':' + UL + f2);
       [f1, f2].forEach(function (f) { for (var k = 0; k < nCol; k++) { var x = ws.getCell(L(k) + f); x.font = { bold: true, size: f === f1 ? 9.5 : 8.5, color: { argb: 'FF444444' } }; x.alignment = { horizontal: k === 0 || k === nCol - 1 ? 'left' : 'center', vertical: 'middle' }; x.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUAVE } }; } });
       for (k = 0; k < nCol; k++) borde(ws.getCell(L(k) + f2), true);
@@ -1130,10 +1135,10 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       dias.forEach(function (t, di) {
         ws.getCell('A' + fila).value = diaCorto(t); ws.getCell('A' + fila).font = { bold: true };
         serv.forEach(function (s, i) {
-          var x = m[t + '|' + s] || {}, col = 1 + i * 2;
-          var ca = ws.getCell(L(col) + fila), cn = ws.getCell(L(col + 1) + fila);
-          ca.value = x.adultos || null; cn.value = x.ninos || null;
-          ca.alignment = cn.alignment = { horizontal: 'center' };
+          var x = m[t + '|' + s] || {}, col = 1 + i * K;
+          var ca = ws.getCell(L(col) + fila), cn = ws.getCell(L(col + 1) + fila), cb = ws.getCell(L(col + 2) + fila);
+          ca.value = x.adultos || null; cn.value = x.ninos || null; cb.value = x.bebes || null;
+          ca.alignment = cn.alignment = cb.alignment = { horizontal: 'center' };
         });
         ws.getCell(UL + fila).value = SALAS.filter(function (sa) { return m[t + '|' + sa]; }).join(', ') || null;
         for (var k = 0; k < nCol; k++) borde(ws.getCell(L(k) + fila));
@@ -1150,12 +1155,16 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       for (k = 0; k < nCol; k++) borde(ws.getCell(L(k) + fila), true);
       fila++;
       var fImpIni = fila, rango = function (col) { return col + fIni + ':' + col + fFin; };
-      var porServ = {}; (r.servicios || []).forEach(function (x) { var q = porServ[x.servicio] = porServ[x.servicio] || { a: 0, n: 0, d: 0 }; q.a += x.adultos; q.n += x.ninos; q.d++; });
+      var porServ = {}; (r.servicios || []).forEach(function (x) { var q = porServ[x.servicio] = porServ[x.servicio] || { a: 0, n: 0, b: 0, d: 0 }; q.a += x.adultos; q.n += x.ninos; q.b += (x.bebes || 0); q.d++; });
       var conceptos = [];
       [['Desayuno', 'desayuno', 'Desayuno'], ['Comida', 'comida', 'Comida'], ['Cena', 'cena', 'Cena'], ['Noche', 'noche', 'Alojamiento (noche)']].forEach(function (cx) {
-        var i = serv.indexOf(cx[0]); if (i < 0) return; var q = porServ[cx[0]] || { a: 0, n: 0 };
-        conceptos.push({ txt: cx[2] + ' · adulto', f: 'SUM(' + rango(L(1 + i * 2)) + ')', u: q.a, p: cfgNum('precio.adulto.' + cx[1]) });
-        conceptos.push({ txt: cx[2] + ' · niño', f: 'SUM(' + rango(L(2 + i * 2)) + ')', u: q.n, p: cfgNum('precio.nino.' + cx[1]) });
+        var i = serv.indexOf(cx[0]); if (i < 0) return; var q = porServ[cx[0]] || { a: 0, n: 0, b: 0 };
+        conceptos.push({ txt: cx[2] + ' · adulto', f: 'SUM(' + rango(L(1 + i * K)) + ')', u: q.a, p: cfgNum('precio.adulto.' + cx[1]) });
+        conceptos.push({ txt: cx[2] + ' · niño', f: 'SUM(' + rango(L(2 + i * K)) + ')', u: q.n, p: cfgNum('precio.nino.' + cx[1]) });
+      });
+      [['Desayuno', 'Desayuno'], ['Comida', 'Comida'], ['Cena', 'Cena'], ['Noche', 'Alojamiento (noche)']].forEach(function (cx) {
+        var i = serv.indexOf(cx[0]); if (i < 0) return; var q = porServ[cx[0]] || { b: 0 };
+        if (q.b) conceptos.push({ txt: cx[1] + ' · 0 a ' + gratis + ' años (gratis)', f: 'SUM(' + rango(L(3 + i * K)) + ')', u: q.b, p: 0 });
       });
       [['Salón', 'salon'], ['Salas', 'salas'], ['Capilla', 'capilla'], ['Garaje', 'garaje']].forEach(function (cx) {
         var q = porServ[cx[0]] || { d: 0 };
@@ -1290,7 +1299,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       fila('Teléfono', c.telefono, r.telefono) + fila('Correo', c.email, r.email) +
       fila('Entidad', g.entidad, gd.entidad) + fila('CIF', g.cif, gd.cif) + fila('Dirección', g.direccion, gd.direccion) +
       fila('Representante', g.representante, gd.representante) + fila('DNI', g.dni, gd.dni) + fila('Cargo', g.cargo, gd.cargo) + '</div>' +
-      '<div class="tarjeta"><h2>Servicios y salas</h2>' + (dias.length ? dias.map(function (t) {
+      '<div class="tarjeta"><h2>Servicios y salas</h2><p class="sub" style="margin:-4px 0 8px;font-size:13px">Total de personas en cada servicio (incluidos los de 0 a ' + gratis + '). Al aplicar se reparte: primero los de 0 a ' + gratis + ', luego los niños y el resto, adultos.</p>' + (dias.length ? dias.map(function (t) {
         return '<div class="dato"><span>' + esc(diaCorto(t)) + '</span><span>' + esc((porSv[t] || []).join(' · ')) + (salas[t] ? '<br><small class="sub">' + esc(salas[t].join(', ')) + '</small>' : '') + '</span></div>';
       }).join('') : '<p class="sub">Sin servicios.</p>') +
       (r.servicios && r.servicios.length ? '<p class="sub" style="margin:8px 0 0;font-size:13px">Al aplicar se sustituyen los servicios que tiene ahora la reserva.</p>' : '') + '</div>' +
@@ -1304,7 +1313,9 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       '<div class="tarjeta"><h2>Protección de datos</h2>' +
       '<div class="dato"><span>Tratamiento de datos</span><span>' + (d.consentimientos && d.consentimientos.datos ? 'Sí' : 'No') + '</span></div>' +
       '<div class="dato"><span>Imágenes</span><span>' + (d.consentimientos && d.consentimientos.imagenes ? 'Sí' : 'No') + '</span></div>' +
-      '<div class="dato"><span>Actúa en nombre del grupo</span><span>' + (d.consentimientos && d.consentimientos.autorizacion ? 'Sí' : 'No') + '</span></div></div>' +
+      '<div class="dato"><span>Actúa en nombre del grupo</span><span>' + (d.consentimientos && d.consentimientos.autorizacion ? 'Sí' : 'No') + '</span></div>' +
+      (d.consentimientos && d.consentimientos.textos ? '<details class="txt-acep"><summary>Ver los textos que aceptó</summary>' +
+        ['datos', 'imagenes', 'autorizacion'].map(function (k) { var t = d.consentimientos.textos[k]; return t ? '<p>' + esc(t).replace(/\n/g, '<br>') + '</p>' : ''; }).join('') + '</details>' : '') + '</div>' +
       '<div class="form-espacio"></div><div class="pie-form"><div class="total">' + (f.estado === 'Aplicado' ? 'Ya aplicado' : 'Pendiente de aplicar') + '</div>' +
       '<button class="btn" id="frAplicar">' + (f.estado === 'Aplicado' ? 'Aplicar de nuevo' : 'Aplicar a la reserva') + '</button></div>';
     enlazarVolver();
@@ -1328,7 +1339,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     function campo(a) {
       var id = 'ad_' + a.clave.replace(/\W/g, '_');
       var etiqueta = esc(a.descripcion) + (a.tipo === 'euros' ? ' (€)' : '');
-      if (a.tipo === 'largo') return '<label class="campo"><span>' + etiqueta + '</span><textarea class="entrada" id="' + id + '" data-k="' + esc(a.clave) + '" maxlength="2000">' + esc(a.valor) + '</textarea></label>';
+      if (a.tipo === 'largo') return '<label class="campo"><span>' + etiqueta + '</span><textarea class="entrada" id="' + id + '" data-k="' + esc(a.clave) + '" maxlength="4000"' + (String(a.valor || '').length > 400 ? ' rows="10"' : '') + '>' + esc(a.valor) + '</textarea></label>';
       var extra = a.tipo === 'euros' ? ' inputmode="decimal" placeholder="a consultar"' : a.tipo === 'num' ? ' inputmode="numeric"' : ' maxlength="120"';
       return '<label class="campo"><span>' + etiqueta + '</span><input class="entrada" id="' + id + '" data-k="' + esc(a.clave) + '" value="' + esc(a.valor) + '"' + extra + ' autocomplete="off"></label>';
     }

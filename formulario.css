@@ -62,3 +62,8 @@ table.g input[type=checkbox] { width: 24px; height: 24px; accent-color: #85200C;
 .fg-toast.error { background: #B42318; }
 .fin { text-align: center; padding: 30px 10px; }
 .fin .ic { width: 64px; height: 64px; border-radius: 50%; background: #E8F2EA; color: #1F5F3A; display: grid; place-items: center; margin: 0 auto 12px; font-size: 34px; font-weight: 700; }
+.leer { margin: 6px 0 2px; border: 1px solid #E0D9CF; border-radius: 10px; background: #FBF8F4; }
+.leer summary { cursor: pointer; padding: 10px 12px; font-size: 14px; font-weight: 700; color: #85200C; min-height: 44px; display: flex; align-items: center; }
+.leer[open] summary { border-bottom: 1px solid #E0D9CF; }
+.leer-txt { padding: 4px 12px 8px; max-height: 320px; overflow-y: auto; font-size: 13px; line-height: 1.5; color: #333; }
+.leer-txt p { margin: 8px 0; }

@@ -465,7 +465,7 @@ body[data-vista="calendario"] .cal-solo .semana { flex: 1 0 auto; min-height: 48
 .sv-dia { border-top: 1px solid var(--linea); padding: 10px 0 12px; }
 .sv-dia:first-of-type { border-top: 0; padding-top: 0; }
 .sv-dia h3 { margin: 4px 0 8px; text-transform: none; letter-spacing: 0; font-size: 15px; color: var(--texto); }
-.sv-fila { display: grid; grid-template-columns: 90px repeat(2, minmax(0, 1fr)); gap: 8px; align-items: end; margin-bottom: 6px; }
+.sv-fila { display: grid; grid-template-columns: 84px repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; margin-bottom: 6px; }
 .sv-fila > b { font-size: 14px; padding-bottom: 12px; }
 .sv-salas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .sv-salas .chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--linea); background: #fff; font-size: 14px; cursor: pointer; }
@@ -557,3 +557,7 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: max(16px, 1em); }
 /* v1.7.0: formulario del grupo */
 .etiqueta.form { background: #E3ECF8; color: #1D4E89; }
+/* v1.7.1: textos aceptados en el formulario del grupo */
+.txt-acep { margin-top: 8px; font-size: 13px; }
+.txt-acep summary { cursor: pointer; color: var(--texto-2); }
+.txt-acep p { margin: 8px 0 0; line-height: 1.45; }

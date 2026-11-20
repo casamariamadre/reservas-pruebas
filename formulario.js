@@ -70,7 +70,11 @@
     (r.servicios || []).forEach(function (x) { if (INFO.salas.indexOf(x.servicio) >= 0) F.salaSet[x.fecha + '|' + x.servicio] = true; });
     rellenarServicios();
   }
-  function totalPersonas() { return F.personas.adultos + F.personas.ninos; }
+  /** Todos los que comen y duermen (también los de 0 a 4, que son gratis). */
+  function totalPersonas() { return F.personas.adultos + F.personas.ninos + F.personas.bebes; }
+  /** Los que necesitan cama (los de 0 a 4 no cuentan para el reparto de habitaciones). */
+  function personasCama() { return F.personas.adultos + F.personas.ninos; }
+  var AVISO_BEBES = 'Si tienen alguna necesidad para los bebés, consúltenos.';
   function rellenarServicios(anterior) {
     var pos = serviciosPosibles(), tot = totalPersonas();
     Object.keys(pos).forEach(function (k) { if (anterior == null || F.servMap[k] == null || F.servMap[k] === anterior) F.servMap[k] = tot; });
@@ -125,8 +129,9 @@
     return '<div><h2>Personas y servicios</h2><div class="hint">Solo número de personas. No necesitamos nombres ni edades.</div></div>' +
       '<div class="card">' + stepper('adultos', F.personas.adultos, 'Adultos', 'Desde ' + adulto + ' años') +
       stepper('ninos', F.personas.ninos, 'Niños de ' + (+gratis + 1) + ' a ' + (+adulto - 1) + ' años') +
-      stepper('bebes', F.personas.bebes, 'Niños de 0 a ' + gratis + ' años', 'Gratis') + '</div>' +
-      '<div class="card"><div class="card-tit">¿Cuántos en cada servicio?</div><div class="hint" style="margin-bottom:6px">Ya está rellenado con el total según el horario. Cambie solo lo que no sea así.</div>' +
+      stepper('bebes', F.personas.bebes, 'Niños de 0 a ' + gratis + ' años', 'Gratis') +
+      (F.personas.bebes ? '<div class="hint" style="padding:8px 0 2px">' + AVISO_BEBES + '</div>' : '') + '</div>' +
+      '<div class="card"><div class="card-tit">¿Cuántos en cada servicio?</div><div class="hint" style="margin-bottom:6px">Ya está rellenado con el total de personas según el horario' + (F.personas.bebes ? ', <b>incluidos los niños de 0 a ' + gratis + ' años</b>' : '') + '. Cambie solo lo que no sea así.</div>' +
       '<div class="tabla-wrap"><table class="g">' + cab + filas + '</table></div></div>' +
       '<div class="card"><div class="card-tit">Salas</div><div class="hint" style="margin-bottom:6px">Marque los días que necesitan cada espacio.</div><div class="tabla-wrap"><table class="g">' + cab + salas + '</table></div></div>' +
       '<div class="card"><div class="card-tit">Alergias e intolerancias</div><div class="hint">Para la cocina. Cada persona se indica con una letra (A, B…): no escriba nombres.</div>' +
@@ -154,17 +159,23 @@
       stepper('literas', h.literas, 'Jóvenes en literas', 'Habitaciones de 4') +
       stepper('movilidad', h.movilidad, 'Personas con movilidad reducida', 'Cerca del ascensor') + '</div>' +
       '<div id="reparto">' + htmlReparto() + '</div>' +
-      '<div class="card"><label class="f" for="hObs" style="margin-top:0">Observaciones (opcional)</label><textarea id="hObs" maxlength="300">' + esc(h.observaciones || '') + '</textarea></div>';
+      '<div class="card"><label class="f" for="hObs" style="margin-top:0">Observaciones (opcional)</label>' +
+      (F.personas.bebes ? '<div class="hint" style="margin-bottom:6px">' + AVISO_BEBES + '</div>' : '') +
+      '<textarea id="hObs" maxlength="300">' + esc(h.observaciones || '') + '</textarea></div>';
   }
   function htmlReparto() {
-    var h = F.habitaciones, n = h.matrimonios * 2 + h.comparten + h.individual + h.literas + h.movilidad, t = totalPersonas();
-    return n === t ? '<div class="ok-box">✓ ' + n + ' de ' + t + ' personas repartidas</div>' :
-      '<div class="av-box">' + n + ' de ' + t + ' personas repartidas' + (n > t ? ' (sobran ' + (n - t) + ')' : ' (faltan ' + (t - n) + ')') + '. Puede enviarlo igualmente; la Casa lo revisará.</div>';
+    var h = F.habitaciones, n = h.matrimonios * 2 + h.comparten + h.individual + h.literas + h.movilidad, t = personasCama();
+    return (n === t ? '<div class="ok-box">✓ ' + n + ' de ' + t + ' personas repartidas</div>' :
+      '<div class="av-box">' + n + ' de ' + t + ' personas repartidas' + (n > t ? ' (sobran ' + (n - t) + ')' : ' (faltan ' + (t - n) + ')') + '. Puede enviarlo igualmente; la Casa lo revisará.</div>') +
+      (F.personas.bebes ? '<div class="hint" style="margin-top:6px">Los niños de 0 a ' + (aj('edad.gratis_hasta') || 4) + ' años no se cuentan aquí.</div>' : '');
   }
 
   function calculo() {
     var s = { a: 0, n: 0 }, total = 0, falta = false;
-    var tot = {}; Object.keys(F.servMap).forEach(function (k) { var sv = k.split('|')[1]; var v = F.servMap[k] || 0; var ni = Math.min(F.personas.ninos, v); tot[sv] = tot[sv] || { a: 0, n: 0 }; tot[sv].a += v - ni; tot[sv].n += ni; });
+    // Cada casilla es el total; se reparte igual que lo hará la Casa: primero los de 0 a 4 (gratis), luego los niños, el resto adultos.
+    var pos = serviciosPosibles();
+    var tot = {}; Object.keys(F.servMap).forEach(function (k) { if (!pos[k]) return; var sv = k.split('|')[1]; var v = F.servMap[k] || 0; var be = Math.min(F.personas.bebes, v); var ni = Math.min(F.personas.ninos, v - be);
+      tot[sv] = tot[sv] || { a: 0, n: 0, b: 0 }; tot[sv].a += v - be - ni; tot[sv].n += ni; tot[sv].b += be; });
     [['Desayuno', 'desayuno'], ['Comida', 'comida'], ['Cena', 'cena'], ['Noche', 'noche']].forEach(function (c) {
       var x = tot[c[0]]; if (!x) return;
       var pa = precio('precio.adulto.' + c[1]), pn = precio('precio.nino.' + c[1]);
@@ -176,15 +187,20 @@
   function paso4() {
     var p = F.personas, c = calculo(), t = c.tot;
     var serv = [];
-    if (t.Noche) serv.push((t.Noche.a + t.Noche.n) + ' pernoctaciones');
-    ['Desayuno', 'Comida', 'Cena'].forEach(function (k) { if (t[k]) serv.push((t[k].a + t[k].n) + ' ' + k.toLowerCase() + (k === 'Comida' ? 's' : k === 'Cena' ? 's' : 's')); });
+    if (t.Noche) serv.push((t.Noche.a + t.Noche.n + t.Noche.b) + ' pernoctaciones');
+    ['Desayuno', 'Comida', 'Cena'].forEach(function (k) { if (t[k]) serv.push((t[k].a + t[k].n + t[k].b) + ' ' + k.toLowerCase() + 's'); });
     var salas = {}; Object.keys(F.salaSet).forEach(function (k) { if (!F.salaSet[k]) return; var x = k.split('|'); (salas[x[1]] = salas[x[1]] || []).push(corto(x[0])); });
     var h = F.habitaciones, hab = [];
     if (h.matrimonios) hab.push(h.matrimonios + ' matrimonios'); if (h.comparten) hab.push(h.comparten + ' comparten'); if (h.individual) hab.push(h.individual + ' individuales');
     if (h.literas) hab.push(h.literas + ' en literas'); if (h.movilidad) hab.push(h.movilidad + ' movilidad reducida');
     var al = F.hayAlergias ? F.alergias.filter(function (a) { return a.alergenos.length || a.otras; }) : [];
     var euros = c.total.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2, useGrouping: 'always' }) + ' €';
-    var cs = F.consentimientos;
+    var cs = F.consentimientos, TX = INFO.textos || {};
+    function leerMas(tit, txt) {
+      if (!txt) return '';
+      return '<details class="leer"><summary>' + tit + '</summary><div class="leer-txt">' +
+        String(txt).split(/\n+/).map(function (pp) { return '<p>' + esc(pp) + '</p>'; }).join('') + '</div></details>';
+    }
     return '<div><h2>Revisar y enviar</h2><div class="hint">Compruebe el resumen. Podrá corregirlo con este mismo enlace hasta el día de entrada.</div></div>' +
       '<div class="card resumen">' +
       '<b>Personas:</b> ' + p.adultos + ' adultos' + (p.ninos ? ' · ' + p.ninos + ' niños' : '') + (p.bebes ? ' · ' + p.bebes + ' de 0 a ' + (aj('edad.gratis_hasta') || 4) + ' años' : '') + '<br>' +
@@ -192,11 +208,14 @@
       '<b>Salas:</b> ' + (Object.keys(salas).map(function (k) { return k.toLowerCase() + ' (' + salas[k].join(', ') + ')'; }).join(', ') || '—') + '<br>' +
       (aloj() ? '<b>Habitaciones:</b> ' + (hab.join(', ') || '—') + '<br>' : '') +
       '<b>Alergias:</b> ' + (al.length ? al.map(function (a, i) { return letra(i) + ': ' + a.alergenos.concat(a.otras ? [a.otras] : []).join(', '); }).join(' · ') : 'ninguna') + '<br>' +
-      '<b>Importe estimado:</b> ' + euros + ' <span class="hint">(alojamiento y comidas; sin salas' + (c.falta ? '; algún precio a consultar' : '') + ')</span></div>' +
+      '<b>Importe estimado:</b> ' + euros + ' <span class="hint">(alojamiento y comidas; sin salas' + (p.bebes ? '; los de 0 a ' + (aj('edad.gratis_hasta') || 4) + ' años, gratis' : '') + (c.falta ? '; algún precio a consultar' : '') + ')</span></div>' +
       '<div class="card"><div class="card-tit">Protección de datos</div>' +
-      '<div class="hint" style="margin-bottom:4px">Los datos se usan solo para gestionar su estancia en la Casa. Recibirá el documento completo con el contrato.</div>' +
+      '<div class="hint" style="margin-bottom:4px">Los datos se usan solo para gestionar su estancia en la Casa. Lea la información antes de marcar las casillas.</div>' +
+      leerMas('Leer la información sobre protección de datos', TX.datos) +
       '<label class="chk"><input type="checkbox" id="k1"' + (cs.datos ? ' checked' : '') + '><span>He sido informado y autorizo el tratamiento de los datos. <b>(obligatorio)</b></span></label>' +
+      leerMas('Leer la autorización de imágenes', TX.imagenes) +
       '<label class="chk"><input type="checkbox" id="k2"' + (cs.imagenes ? ' checked' : '') + '><span>Autorizo la captación y difusión de imágenes. (opcional)</span></label>' +
+      leerMas('Leer la declaración de quien envía el formulario', TX.autorizacion) +
       '<label class="chk"><input type="checkbox" id="k3"' + (cs.autorizacion ? ' checked' : '') + '><span>Actúo en nombre del grupo, con la autorización de sus integrantes. <b>(obligatorio)</b></span></label></div>' +
       '<div class="hint" style="text-align:center">Al enviar, la Casa recibe los datos y le enviará el presupuesto y el contrato para firmar.</div>';
   }
@@ -225,7 +244,7 @@
           leer();
           var antes = totalPersonas();
           F.personas[k] = num(F.personas[k] + d);
-          if (k !== 'bebes') rellenarServicios(antes);
+          rellenarServicios(antes);
           return pintar();
         }
         if (k === 'nAler') {
