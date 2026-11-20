@@ -3,7 +3,8 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '1.6.0';
+  var VERSION = '1.6.1';
+  var VERSION_FECHA = '20/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
   var $ = function (s, el) { return (el || document).querySelector(s); };
@@ -91,7 +92,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     return DB.cargarTodo().then(function (d) { fijarDatos(d); return d; });
   }
 
-  function fijarDatos(d) { S.datos = d; S.sinConexion = false; lsSet('cache', { datos: d, cuando: Date.now() }); avisoConexion(); }
+  function fijarDatos(d) { S.datos = d; S.sinConexion = false; S.ultimaCarga = Date.now(); lsSet('cache', { datos: d, cuando: Date.now() }); avisoConexion(); }
 
   function avisoConexion() {
     var a = $('#aviso');
@@ -105,16 +106,17 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     } else a.hidden = true;
   }
 
-  function editando() { var v = ruta().vista; return v === 'nueva' || v === 'editar'; }
+  /** Pantallas donde se escribe: aquí nunca se redibuja solo (para no perder lo escrito). */
+  function editando() { var v = ruta().vista; return v === 'nueva' || v === 'editar' || v === 'servicios' || v === 'admin'; }
 
   /** Recarga datos. Si se está editando una reserva NO se redibuja (para no perder lo escrito). */
-  function recargar(silencioso) {
+  function recargar(silencioso, forzar) {
     if (!silencioso) cargando(true);
-    return cargarTodo().then(function () { if (!editando()) pintar(); })
+    return cargarTodo().then(function () { if (forzar || !editando()) pintar(); })
       .catch(function (e) {
         if (e.codigo === 'CLAVE') return salir('La clave ya no es válida. Vuelve a entrar.');
         var c = lsGet('cache');
-        if (e.red && c) { S.datos = c.datos; S.sinConexion = true; avisoConexion(); if (!editando()) pintar(); }
+        if (c && (e.red || !S.datos)) { S.datos = c.datos; S.sinConexion = true; avisoConexion(); if (forzar || !editando()) pintar(); }
         else if (!silencioso) toast(e.message, true);
       })
       .then(function () { cargando(false); });
@@ -224,7 +226,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       gestores.map(function (g) { return '<button type="button" class="chip' + (g === elegido ? ' activo' : '') + '">' + esc(g) + '</button>'; }).join('') +
       '</div><label class="campo" style="margin-top:12px"><span>Tu clave</span><input class="entrada" id="lClave" type="password" inputmode="numeric" autocomplete="current-password" placeholder="' + (DEMO ? 'En demostración: demo' : 'Clave personal') + '"></label>' +
       '<p class="error-txt" id="lError">' + esc(msg || '') + '</p>' +
-      '<button class="btn ancho" id="lEntrar" style="margin-top:14px">Entrar</button></div></div>';
+      '<button class="btn ancho" id="lEntrar" style="margin-top:14px">Entrar</button></div>' +
+      '<p class="sub" style="text-align:center;font-size:12px;margin-top:14px">Versión ' + VERSION + ' · ' + VERSION_FECHA + '</p></div>';
     $('#lGestores').onclick = function (e) {
       var b = e.target.closest('.chip'); if (!b) return;
       $$('.chip', this).forEach(function (c) { c.classList.remove('activo'); });
@@ -1198,8 +1201,11 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       '<button class="btn borde ancho" id="aRegenerar">Regenerar calendario de Google</button>' +
       (DEMO ? '<button class="btn borde ancho" id="aReiniciar" style="margin-top:10px">Reiniciar demostración</button>' : '') +
       '</details>' +
-      '<button class="btn peligro ancho" id="aSalir">Cerrar sesión en este móvil</button>' +
-      '<p class="sub" style="text-align:center;font-size:12px;margin-top:18px">App ' + VERSION + ' · Puente ' + esc(aj.version || '1.0.0') + (DEMO ? ' · demostración' : '') + '</p>';
+      '<div class="tarjeta"><h2>Versión</h2>' +
+      '<div class="dato"><span>App</span><span><b>' + VERSION + '</b> · ' + VERSION_FECHA + '</span></div>' +
+      '<div class="dato"><span>Servidor (puente)</span><span><b>' + esc(aj.version || '—') + '</b></span></div>' +
+      '<div class="dato"><span>Datos comprobados</span><span>' + (S.ultimaCarga ? new Date(S.ultimaCarga).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—') + '</span></div></div>' +
+      '<button class="btn peligro ancho" id="aSalir">Cerrar sesión en este móvil</button>';
     function accion(nombre, texto, fmt) {
       return function () {
         if (S.sinConexion) return toast('Sin conexión.', true);
@@ -1233,16 +1239,20 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   };
   $('#btnRecargar').onclick = function () { recargar(); };
   window.addEventListener('hashchange', pintar);
-  // Al volver a la app: actualizar datos sin borrar lo que se esté escribiendo.
-  document.addEventListener('visibilitychange', function () { if (!document.hidden && S.clave && S.datos) recargar(true); });
+  // Al volver a la app (si han pasado más de 2 minutos): comprobar con el reloj y luego mostrar.
+  // Si se está escribiendo en un formulario, no se toca nada.
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden || !S.clave || !S.datos || editando()) return;
+    if (Date.now() - (S.ultimaCarga || 0) < 120000) return;
+    recargar();
+  });
   avisoConexion();
 
   S.clave = lsGet('clave'); S.gestor = lsGet('gestor');
-  if (S.clave) {
-    var c = lsGet('cache');
-    if (c) { S.datos = c.datos; pintar(); }
-    recargar(!!c);
-  } else pintarLogin();
+  // Al abrir: primero se comprueban los datos (con el reloj) y luego se muestra la pantalla, una sola vez.
+  // Si no hay conexión, se muestran los últimos datos guardados con el aviso de «sin conexión».
+  if (S.clave) recargar(false, true);
+  else pintarLogin();
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
 })();

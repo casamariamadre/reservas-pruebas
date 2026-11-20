@@ -469,7 +469,8 @@ body[data-vista="calendario"] .cal-solo .semana { flex: 1 0 auto; min-height: 48
 .sv-fila > b { font-size: 14px; padding-bottom: 12px; }
 .sv-salas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .sv-salas .chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--linea); background: #fff; font-size: 14px; cursor: pointer; }
-.sv-salas .chip input { position: absolute; opacity: 0; pointer-events: none; }
+.sv-salas .chip { position: relative; }
+.sv-salas .chip input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
 .sv-salas .chip.activo { background: var(--pri); border-color: var(--pri); color: #fff; }
 /* v1.5.1: hoja de estancia (presupuesto / liquidación) */
 .hoja-barra { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -524,3 +525,6 @@ body[data-vista="calendario"] .cal-solo .semana { flex: 1 0 auto; min-height: 48
   .hoja-barra .fila-btns { flex: 1 1 auto; flex-wrap: nowrap; gap: 6px; }
   .hoja-barra .fila-btns .btn { min-height: 38px; padding: 6px 10px; font-size: 14px; }
 }
+/* v1.6.1: la página entera nunca se desplaza (solo se desplaza el contenido de cada vista) */
+@supports (overflow: clip) { html, body { overflow: clip; } }
+@media print { html, body { overflow: visible !important; height: auto !important; } }
