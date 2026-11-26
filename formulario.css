@@ -1,0 +1,140 @@
+/* Formulario del grupo · Casa María Madre (página pública, sin clave) */
+* { box-sizing: border-box; touch-action: manipulation; }
+html, body { margin: 0; background: #F6F2EC; color: #1A1A1A; font: 15px/1.45 Arial, Helvetica, sans-serif; }
+.franja-pruebas { position: sticky; top: 0; z-index: 40; background: #F2B705; color: #3a2a00; font: 700 12px/1.3 Arial, sans-serif; text-align: center; padding: 5px 8px; letter-spacing: .3px; }
+#fg { max-width: 560px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+.fg-cab { background: #fff; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 8px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E0D9CF; }
+.fg-marca { display: flex; align-items: center; gap: 10px; font-family: Georgia, "Times New Roman", serif; font-size: 13px; line-height: 1.2; color: #85200C; }
+.fg-marca img { width: 38px; height: 38px; border-radius: 8px; }
+.fg-marca b { font-size: 16px; }
+.fg-paso { font-size: 12px; color: #555; }
+.fg-barra { background: #fff; padding: 0 16px 8px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.fg-barra span { height: 5px; border-radius: 3px; background: #E0D9CF; }
+.fg-barra span.on { background: #85200C; }
+.fg-grupo { background: #fff; padding: 0 16px 10px; font-size: 12.5px; color: #555; border-bottom: 1px solid #E0D9CF; }
+.fg-grupo:empty { display: none; }
+main { flex: 1; padding: 14px 12px 24px; display: flex; flex-direction: column; gap: 12px; }
+h2 { font-family: Georgia, "Times New Roman", serif; font-size: 19px; margin: 0 0 4px; }
+.hint { font-size: 13px; color: #555; line-height: 1.45; }
+.card { background: #fff; border: 1px solid #E0D9CF; border-radius: 12px; padding: 12px 14px; }
+.card-tit { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.card-tit.pri { color: #85200C; }
+label.f { display: block; font-size: 13px; font-weight: 700; color: #333; margin: 10px 0 4px; }
+input[type=text], input[type=tel], input[type=email], textarea { width: 100%; border: 1px solid #9A9A9A; border-radius: 8px; padding: 0 10px; font-size: 16px; min-height: 44px; font-family: inherit; background: #fff; color: inherit; }
+textarea { padding: 10px; min-height: 70px; resize: vertical; }
+input[readonly] { background: #F1EDE7; color: #444; border-color: #D6D0C8; }
+input:focus, textarea:focus { outline: none; border-color: #85200C; box-shadow: 0 0 0 3px rgba(133, 32, 12, .15); }
+.paso-fila { display: flex; align-items: center; justify-content: space-between; min-height: 56px; border-bottom: 1px solid #EEE; gap: 8px; }
+.paso-fila:last-child { border-bottom: 0; }
+.paso-fila .t { font-size: 15px; font-weight: 700; }
+.stp { display: flex; align-items: center; gap: 6px; flex: none; }
+.stp button { width: 44px; height: 44px; border-radius: 22px; border: 1px solid #85200C; background: #fff; color: #85200C; font-size: 22px; line-height: 1; cursor: pointer; }
+.stp output { min-width: 32px; text-align: center; font-size: 18px; font-weight: 700; }
+.tabla-wrap { overflow-x: auto; }
+table.g { border-collapse: collapse; width: 100%; }
+table.g th { font-size: 11px; color: #555; font-weight: 700; padding: 4px 2px; text-transform: uppercase; }
+table.g td { text-align: center; padding: 3px 2px; border-top: 1px solid #EEE; font-size: 13px; }
+table.g th.l { text-align: left; text-transform: none; font-size: 13px; color: #1A1A1A; }
+table.g input[type=text] { width: 52px; min-height: 40px; text-align: center; padding: 0; }
+table.g input[type=checkbox] { width: 24px; height: 24px; accent-color: #85200C; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.seg button { height: 44px; border-radius: 10px; border: 1px solid #D6D0C8; background: #fff; font-size: 15px; font-weight: 700; color: #333; cursor: pointer; }
+.seg button.on { border-color: #85200C; background: #85200C; color: #fff; }
+.per { border: 1px solid #E0D9CF; border-radius: 10px; padding: 10px 10px 12px; margin-top: 10px; background: #FBF8F4; }
+.per-cab { display: flex; align-items: center; justify-content: space-between; }
+.algrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.al { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px; border: 1px solid #D6D0C8; border-radius: 10px; background: #fff; font-size: 14px; cursor: pointer; }
+.al input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: #85200C; }
+.al.on { border-color: #85200C; background: #F6E6E1; font-weight: 700; }
+.chk { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.4; padding: 8px 0; cursor: pointer; }
+.chk input { width: 22px; height: 22px; flex: none; margin: 0; accent-color: #85200C; }
+.ok-box { background: #E8F2EA; border: 1px solid #9CC5A8; color: #1F5F3A; border-radius: 10px; padding: 10px 12px; font-size: 14px; font-weight: 700; }
+.av-box { background: #FFF4D6; border: 1px solid #E8C66A; color: #6B4A10; border-radius: 10px; padding: 10px 12px; font-size: 14px; font-weight: 700; }
+.resumen { font-size: 14px; line-height: 1.65; }
+.fg-pie { position: sticky; bottom: 0; background: #fff; border-top: 1px solid #E0D9CF; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 10px; }
+.fg-pie button { height: 50px; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
+.b-sec { flex: 1; border: 1px solid #85200C; background: #fff; color: #85200C; }
+.b-pri { flex: 2; border: 0; background: #85200C; color: #fff; }
+.b-pri:disabled { opacity: .5; }
+.fg-cargando { text-align: center; color: #555; padding: 60px 0; }
+.fg-spinner { width: 36px; height: 36px; border: 4px solid #E0D9CF; border-top-color: #85200C; border-radius: 50%; margin: 0 auto 12px; animation: gira 0.9s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+.fg-toast { position: fixed; left: 16px; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); max-width: 480px; margin: 0 auto; background: #2B2522; color: #fff; padding: 12px 16px; border-radius: 12px; text-align: center; z-index: 10; }
+.fg-toast.error { background: #B42318; }
+.fin { text-align: center; padding: 30px 10px; }
+.fin .ic { width: 64px; height: 64px; border-radius: 50%; background: #E8F2EA; color: #1F5F3A; display: grid; place-items: center; margin: 0 auto 12px; font-size: 34px; font-weight: 700; }
+.leer { margin: 6px 0 2px; border: 1px solid #E0D9CF; border-radius: 10px; background: #FBF8F4; }
+.leer summary { cursor: pointer; padding: 10px 12px; font-size: 14px; font-weight: 700; color: #85200C; min-height: 44px; display: flex; align-items: center; }
+.leer[open] summary { border-bottom: 1px solid #E0D9CF; }
+.leer-txt { padding: 4px 12px 8px; max-height: 320px; overflow-y: auto; font-size: 13px; line-height: 1.5; color: #333; }
+.leer-txt p { margin: 8px 0; }
+/* v1.7.2: lo oculto, siempre oculto; pantalla final limpia */
+[hidden] { display: none !important; }
+body.fg-final, body.fg-final #fg, body.fg-final .fg-cab, body.fg-final .fg-grupo { background: #fff; }
+body.fg-final .fg-grupo, body.fg-final .fg-cab { border-bottom: 0; }
+.b-fin { display: block; width: 100%; max-width: 320px; height: 50px; margin: 24px auto 0; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
+.fin.adios { padding-top: 80px; }
+.fin.adios h2 { font-size: 22px; color: #85200C; }
+/* v2.0.0: firma del contrato */
+.doc-card { max-height: 55vh; overflow-y: auto; }
+.contrato-doc { font-family: 'Times New Roman', Georgia, serif; font-size: 15px; line-height: 1.45; color: #111; }
+.contrato-doc p { margin: 0 0 8px; text-align: justify; }
+.contrato-doc .ct-h { text-align: center; font-size: 15px; margin: 14px 0 8px; }
+.contrato-doc .ct-c { font-size: 15px; margin: 12px 0 4px; }
+.contrato-doc .ct-d { text-align: right; }
+.contrato-doc .hueco { background: #FFF4D6; padding: 0 2px; }
+.ct-firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; font-size: 14px; }
+.ct-firmas small { color: #555; }
+.ct-firma { display: block; width: 100%; height: 80px; border-bottom: 1px solid #333; margin: 4px 0 6px; }
+.pad { display: block; width: 100%; height: 170px; border: 2px dashed #B9AFA4; border-radius: 10px; background: #fff; touch-action: none; }
+.b-link { background: none; border: 0; color: #85200C; font-weight: 700; font-size: 14px; padding: 8px 4px; cursor: pointer; }
+.b-sec.b-fin { background: #fff; border: 1px solid #85200C; color: #85200C; }
+.imprimir-solo { display: none; }
+@media print {
+  body.fg-final #fg > *:not(main), #fgToast { display: none !important; }
+  .fin, .card.fin { display: none !important; }
+  .imprimir-solo { display: block !important; }
+  .contrato-doc .hueco { background: none; }
+  html, body { background: #fff !important; }
+}
+
+/* 2.1.0 · Presupuesto y datos en resumen (página de aceptación) */
+.pre-fila { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; padding: 6px 0; border-bottom: 1px solid #eee; }
+.pre-fila b { text-align: right; }
+
+/* 2.1.3 · Bloque destacado «Rellene y firme aquí» y condiciones plegadas */
+.zona-firma { background: #FFF8EC; border: 1px solid #E5D5BC; border-left: 5px solid #85200C; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.zf-tit { font-family: Georgia, "Times New Roman", serif; font-size: 17px; font-weight: 700; color: #85200C; margin: 0 0 2px; }
+.zf-paso { background: #fff; border: 1px solid #E0D9CF; border-radius: 10px; }
+.zf-paso > summary { list-style: none; cursor: pointer; padding: 11px 12px; font-size: 14px; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.zf-paso > summary::-webkit-details-marker { display: none; }
+.zf-paso[open] > summary { border-bottom: 1px solid #E0D9CF; }
+.zf-sum-izq { font-weight: 700; color: #1A1A1A; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zf-sum-izq.falta { color: #85200C; }
+.zf-sum-der { font-size: 13px; font-weight: 700; color: #85200C; flex: none; }
+.zf-cuerpo { padding: 10px 12px 12px; }
+.zf-cuerpo label.f:first-child { margin-top: 2px; }
+.zf-casillas { padding: 8px 12px; }
+.zf-casillas .chk { padding: 6px 0; }
+.zf-casillas .chk-opc { font-size: 13px; color: #444; padding: 3px 0; }
+.zf-casillas a { color: #85200C; font-weight: 700; text-decoration: underline; }
+.zf-firma-sum { font-size: 15px; font-weight: 700; color: #85200C; }
+.zf-firma-sum.ok { color: #1F5F3A; }
+.zf-firma-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.zona-firma .pad { height: 220px; }
+.cond-plegable > summary { list-style: none; cursor: pointer; padding: 12px 14px; font-size: 14px; font-weight: 700; color: #85200C; min-height: 44px; display: flex; align-items: center; justify-content: space-between; }
+.cond-plegable > summary::-webkit-details-marker { display: none; }
+.cond-plegable[open] > summary { border-bottom: 1px solid #E0D9CF; }
+.cond-plegable .contrato-doc { padding: 12px 14px; }
+
+/* 2.2.0 · Avisos de campo «Falta», recuadro de pago de la señal y aviso de señal en el formulario */
+.falta-av { display: inline-block; font-size: 11.5px; font-weight: 700; color: #85200C; background: #FDE4E1; padding: 1px 7px; border-radius: 999px; margin-left: 4px; vertical-align: 1px; }
+.senal-box, .senal-aviso { background: #FFF8EC; border: 1px solid #E5D5BC; border-left: 5px solid #85200C; text-align: left; }
+.senal-box.ok { background: #E8F2EA; border-color: #9CC5A8; border-left-color: #1F5F3A; }
+.senal-est { margin-top: 10px; }
+.senal-preg { font-size: 14.5px; font-weight: 700; color: #1A1A1A; margin: 6px 0 8px; }
+.senal-msg { font-size: 14px; line-height: 1.45; color: #333; margin: 6px 0 8px; }
+.senal-msg.ok { color: #1F5F3A; font-weight: 700; }
+.senal-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.senal-btns button { min-height: 44px; border-radius: 10px; font-size: 14.5px; font-weight: 700; padding: 8px 14px; cursor: pointer; flex: 1 1 160px; }
+.b-enl-firma { display: inline-block; color: #85200C; font-weight: 700; font-size: 13.5px; text-decoration: underline; padding: 4px 0; }
