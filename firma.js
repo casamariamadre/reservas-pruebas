@@ -58,9 +58,16 @@
   // ---------------- Presupuesto y Pago de la fianza ----------------
   function presupuesto() {
     var p = INFO.presupuesto || {}, casa = INFO.casa || {};
-    if (!p.total) return '';
+    // 2.5.2 (D27): sin personas (o sin importe) no hay presupuesto todavía
+    if (!INFO.personas || !p.total) return '<div class="card"><div class="card-tit pri">Presupuesto</div>' +
+      '<p class="hint" style="margin:0">Todavía no hay número de personas, así que no se puede hacer el presupuesto. Se actualizará al confirmar los detalles, un mes antes de la llegada.</p></div>';
+    var filas = (p.lineas || []).map(function (l) {
+      return '<div class="pre-fila"><span>' + esc(l.txt) + ' (' + l.u + ')</span><b>' + (l.imp == null ? 'a consultar' : eur(l.imp)) + '</b></div>';
+    }).join('');
     return '<div class="card"><div class="card-tit pri">Presupuesto' + (p.actualizadoEl ? ' <span class="hint" style="font-weight:400">· Actualizado el ' + esc(legible(p.actualizadoEl)) + '</span>' : '') + '</div>' +
-      '<div class="pre-fila"><span>Total de la estancia</span><b>' + eur(p.total) + '</b></div>' +
+      filas +
+      '<div class="pre-fila"><span><b>Total previsto</b> · ' + INFO.personas + ' personas</span><b>' + eur(p.total) + '</b></div>' +
+      '<div class="hint" style="margin:4px 0 6px">Un mes antes se actualizará este presupuesto.</div>' +
       (INFO.sinFianza || !p.senal ? '' : '<div class="pre-fila"><span>Fianza, al aceptar</span><b>' + eur(p.senal) + '</b></div>') +
       '<div class="hint" style="margin-top:6px">El importe se ajusta en la liquidación a los servicios realmente prestados; se paga ' + (p.diasPago ? 'en los ' + esc(p.diasPago) + ' días siguientes a la salida' : 'después de la salida') + '.' + (INFO.sinFianza || !p.senal ? '' : ' La fianza se descuenta en la liquidación o se devuelve después.') + (casa.iban ? ' Cuenta: ' + esc(casa.iban) + '.' : '') + '</div></div>';
   }

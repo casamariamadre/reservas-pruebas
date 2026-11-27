@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '2.5.1';
+  var VERSION = '2.5.2';
   var VERSION_FECHA = '28/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -771,7 +771,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   function enviarContrato(r) {
     if (S.sinConexion) return toast('Sin conexión.', true);
     var h = calcularHoja(r);
-    var seguir = Promise.resolve(true);  // 2.5.1: sin importe se envían igual; el presupuesto llega un mes antes
+    // 2.5.1: sin importe se envían igual (el presupuesto llega un mes antes). 2.5.2: si no hay servicios y sí personas, se calculan antes
+    var seguir = asegurarServicios(r).then(function (r2) { h = calcularHoja(r2); return true; }, function () { return true; });
     seguir.then(function (ok) {
       if (!ok) return;
       cargando(true);
@@ -1425,7 +1426,9 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
             lsDel(claveBorrador);
             S.hayCambios = null;
             toast((r ? 'Cambios guardados' : 'Reserva creada') + (res.solapes && res.solapes.length ? ' · coincide con: ' + res.solapes.join(', ') : ''));
-            reemplazar(r ? destVolver : ('reserva/' + encodeURIComponent(res.id)));
+            var seguirA = function () { reemplazar(r ? destVolver : ('reserva/' + encodeURIComponent(res.id))); };
+            var nr = reserva(res.id);  // 2.5.2: primer presupuesto con las comidas calculadas
+            return nr ? asegurarServicios(nr).catch(function () {}).then(seguirA) : seguirA();
           })
           .catch(function (e) { toast(e.message, true); })
           .then(function () { cargando(false); });
@@ -1538,6 +1541,25 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     };
   }
 
+  /** 2.5.2: comidas y noches según la hora de entrada y salida (D25). Una comida cuenta si el grupo está en la Casa a su hora. */
+  function horaComida(sv) { var def = { Desayuno: '09:00', Comida: '14:00', Cena: '21:00' }[sv]; var v = cfg('hora.' + sv.toLowerCase()); return /^\d{2}:\d{2}$/.test(v) ? v : def; }
+  function serviciosCalculados(r, ad, ni, be) {
+    var ini = momento(r.entrada, r.horaEntrada || '12:00'), fin = momento(r.salida, r.horaSalida || '16:00'), out = [];
+    if (!(ad + ni + be) || !(fin > ini)) return out;
+    diasDe(r).forEach(function (d) {
+      ['Desayuno', 'Comida', 'Cena'].forEach(function (sv) { var m = momento(d, horaComida(sv)); if (m >= ini && m <= fin) out.push({ fecha: d, servicio: sv, adultos: ad, ninos: ni, bebes: be }); });
+      if (tipo(r) === 'Alojamiento' && d < r.salida) out.push({ fecha: d, servicio: 'Noche', adultos: ad, ninos: ni, bebes: be });
+    });
+    return out;
+  }
+  /** 2.5.2: si la reserva tiene personas y aún no tiene servicios, se calculan y se guardan (primer presupuesto). */
+  function asegurarServicios(r) {
+    var p = Number(r.personas) || 0;
+    if (!r || (r.servicios || []).length || !p || tipo(r) === 'Bloqueo' || (r.formulario && r.formulario.estado === 'Aplicado')) return Promise.resolve(r);
+    var lista = serviciosCalculados(r, p, 0, 0);
+    if (!lista.length) return Promise.resolve(r);
+    return usarDB(function () { return DB.guardarServicios(r.id, lista, {}); }).then(function () { return reserva(r.id) || r; });
+  }
   function calcularHoja(r) {
     var sv = r.servicios || [], suma = {};
     sv.forEach(function (x) { var k = x.servicio; suma[k] = suma[k] || { a: 0, n: 0, b: 0, dias: 0 }; suma[k].a += x.adultos; suma[k].n += x.ninos; suma[k].b += (x.bebes || 0); suma[k].dias++; });
