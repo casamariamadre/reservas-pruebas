@@ -3,8 +3,8 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '2.4.1';
-  var VERSION_FECHA = '27/11/2026';
+  var VERSION = '2.5.0';
+  var VERSION_FECHA = '28/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
   var $ = function (s, el) { return (el || document).querySelector(s); };
@@ -677,44 +677,42 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var cTxt = fi && fi.estado === 'Firmado' ? 'Aceptado por ' + fi.nombre : papel.enviado ? 'Firmado en papel' : esperaFirma ? 'Enviado, esperando al grupo' : 'Sin enviar';
     var cCq = fi && fi.estado === 'Firmado' ? fechaCorta(fi.firmadoEl) + ' · ' + fi.nombre : papel.enviado ? cuandoQuien(papel.b) : esperaFirma ? cuandoQuien(cEnv) : '';
     var verPre = { txt: 'Ver presupuesto', fn: function () { ir('hoja/' + idq + '?modo=presupuesto&' + suf('condiciones')); } };
-    P.push({ t: 'Presupuesto y condiciones', ap: 'condiciones', e: firmado ? 'ok' : esperaFirma ? 'ahora' : 'pend',
+    P.push({ t: 'Condiciones', ap: 'condiciones', e: firmado ? 'ok' : esperaFirma ? 'ahora' : 'pend',
       txt: cTxt, cq: cCq,
       acc: firmado ? { txt: 'Ver condiciones', fn: function () { ir('contrato/' + idq + '?' + suf('condiciones')); } }
         : { txt: esperaFirma ? 'Reenviar' : 'Enviar para aceptar', fn: function () { enviarContrato(r); } },
       marcas: [verPre].concat(firmado ? [] : [{ txt: 'Firmado en papel', tipo: 'contrato_papel' }]).concat(papel.enviado ? [{ txt: 'Deshacer: papel', tipo: 'contrato_papel_no' }] : []),
       espera: esperaFirma,
       sig: !firmado && !esperaFirma ? 'Enviar el presupuesto y las condiciones' : '' });
-    // 3. Señal
+    // 3. Fianza (2.5.0: solo si el grupo la paga; con ella pagada, la reserva queda confirmada)
+    var sinFz = r.pagaFianza === 'No';
     var fz = senalPagada(r), tieneComp = !!(fi && fi.comprobante);
     var fechaFirma = (fi && fi.firmadoEl) || (papel.enviado && papel.b ? papel.b.fecha : '');
-    var mas7 = firmado && !fz.pagada && !tieneComp && fechaFirma && diasDesde(fechaFirma, hoy) >= 7;
-    var sEst = fz.pagada ? 'ok' : (tieneComp || mas7) ? 'aviso' : firmado ? 'ahora' : 'pend';
-    var sTxt = fz.pagada ? 'Pagada' : tieneComp ? 'Comprobante recibido · comprobar' : mas7 ? 'Pendiente · más de 7 días' : 'Pendiente';
-    var sCq = fz.pagada ? (fz.b ? cuandoQuien(fz.b) : '') : tieneComp ? (fi.comprobanteEl ? fechaCorta(fi.comprobanteEl) + ' · Grupo' : '') : '';
-    var fzMarca = fz.pagada ? { txt: 'Deshacer: señal', tipo: 'fianza_pendiente' } : { txt: 'Marcar señal pagada', tipo: 'fianza_pagada' };
-    var sMarcas = [];
-    if (tieneComp) sMarcas.push({ txt: 'Ver comprobante', fn: function () { verComprobante(r); } });
-    sMarcas.push(fzMarca);
-    if (!fz.pagada && (firmado || esperaFirma)) sMarcas.push({ txt: 'Recordar la señal', fn: function () { recordarSenal(r); } });
-    var sSig = '', sAcc = null, sSigMarca = '';
-    if (!fz.pagada) {
-      if (tieneComp) {
-        sSig = 'Comprobar la señal';
-        sAcc = { txt: 'Ver comprobante', fn: function () { verComprobante(r); } };
-      } else if (mas7) {
-        sSig = 'Recordar la señal';
-        sAcc = { txt: 'Recordar la señal', fn: function () { recordarSenal(r); } };
+    if (!sinFz) {
+      var mas7 = firmado && !fz.pagada && !tieneComp && fechaFirma && diasDesde(fechaFirma, hoy) >= 7;
+      var sEst = fz.pagada ? 'ok' : (tieneComp || mas7) ? 'aviso' : firmado ? 'ahora' : 'pend';
+      var sTxt = fz.pagada ? 'Pagada' : tieneComp ? 'Comprobante recibido · comprobar' : mas7 ? 'Pendiente · más de 7 días' : 'Pendiente';
+      var sCq = fz.pagada ? (fz.b ? cuandoQuien(fz.b) : '') : tieneComp ? (fi.comprobanteEl ? fechaCorta(fi.comprobanteEl) + ' · Grupo' : '') : '';
+      var fzMarca = fz.pagada ? { txt: 'Deshacer: fianza', tipo: 'fianza_pendiente' } : { txt: 'Marcar fianza pagada', tipo: 'fianza_pagada' };
+      var sMarcas = [];
+      if (tieneComp) sMarcas.push({ txt: 'Ver comprobante', fn: function () { verComprobante(r); } });
+      sMarcas.push(fzMarca);
+      if (!fz.pagada && (firmado || esperaFirma)) sMarcas.push({ txt: 'Recordar la fianza', fn: function () { recordarSenal(r); } });
+      var sSig = '', sAcc = null;
+      if (!fz.pagada) {
+        if (tieneComp) { sSig = 'Comprobar la fianza'; sAcc = { txt: 'Ver comprobante', fn: function () { verComprobante(r); } }; }
+        else if (mas7) { sSig = 'Recordar la fianza'; sAcc = { txt: 'Recordar la fianza', fn: function () { recordarSenal(r); } }; }
       }
+      P.push({ t: 'Fianza', ap: 'condiciones', e: sEst, txt: sTxt, cq: sCq,
+        acc: sAcc, marcas: sMarcas,
+        espera: firmado && !fz.pagada && !tieneComp && !mas7,
+        sig: sSig, sigMarca: '' });
     }
-    P.push({ t: 'Señal', ap: 'condiciones', e: sEst, txt: sTxt, cq: sCq,
-      acc: sAcc, marcas: sMarcas,
-      espera: firmado && !fz.pagada && !tieneComp && !mas7,
-      sig: sSig, sigMarca: sSigMarca });
     // 4. Formulario del grupo
     var f = r.formulario, fuera = hoy > r.entrada;
     var env = ultimaNota(r, ['Formulario: enlace enviado', 'Formulario: enlace compartido', 'Formulario: enlace copiado', 'Formulario: enlace creado']);
     var rec = ultimaNota(r, ['Formulario recibido']), apl = ultimaNota(r, ['Formulario aplicado']);
-    var tocaForm = fz.pagada && hoy >= fechaAviso(r.entrada);
+    var tocaForm = (sinFz ? firmado : fz.pagada) && hoy >= fechaAviso(r.entrada);
     if (!f) P.push(fuera ? { t: 'Formulario', ap: 'formulario', e: 'pend', txt: 'No se envió', cq: '' }
       : { t: 'Formulario', ap: 'formulario', e: 'pend', txt: 'Sin enviar', cq: '', acc: { txt: 'Enviar', fn: function () { enviarEnlaceForm(r); } }, sig: tocaForm ? 'Enviar el formulario al grupo' : '' });
     else if (f.estado === 'Recibido') P.push({ t: 'Formulario', ap: 'formulario', e: 'aviso', txt: 'Recibido · falta revisar y aplicar', cq: cuandoQuien(rec) || fechaCorta(f.enviadoEl) + ' · Grupo',
@@ -733,16 +731,6 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       else P.push({ t: 'Habitaciones', ap: 'habitaciones', e: reenv ? 'aviso' : 'ok', txt: n + ' hab. · ' + pernoctan(r) + ' pers.' + (reenv ? ' · el grupo cambió su formulario' : ''),
         cq: cuandoQuien(rep), acc: { txt: reenv ? 'Revisar' : 'Ver', fn: function () { ir('reparto/' + idq + '?' + suf('habitaciones')); } }, sig: reenv ? 'Revisar el reparto de habitaciones' : '' });
     }
-    // 6. Presupuesto actualizado (solo tiene sentido con el formulario aplicado)
-    var pa = marcaDoc(r, 'Presupuesto actualizado enviado', 'Presupuesto actualizado: marcado');
-    var paEnv = pa.enviado || !!(fi && fi.actualizadoEl && !pa.b);
-    var paCq = pa.enviado ? cuandoQuien(pa.b) : (fi && fi.actualizadoEl ? fechaCorta(fi.actualizadoEl) : '');
-    var formApl = !!(f && f.estado === 'Aplicado');
-    P.push({ t: 'Presupuesto actualizado', ap: 'condiciones', e: paEnv ? 'ok' : formApl ? 'ahora' : 'pend',
-      txt: paEnv ? 'Enviado' : 'Sin enviar', cq: paCq,
-      acc: { txt: 'Enviar presupuesto actualizado', fn: function () { enviarPresupuestoActualizado(r); } },
-      marcas: paEnv ? [{ txt: 'Deshacer: presupuesto actualizado', tipo: 'presupuesto_actualizado_no' }] : [],
-      sig: formApl && !paEnv ? 'Enviar el presupuesto actualizado' : '' });
     // 7. Estancia
     var dias = Math.round((aFecha(r.entrada) - aFecha(hoy)) / 864e5);
     P.push(hoy < r.entrada ? { t: 'Estancia', ap: 'estancia', e: 'pend', txt: 'Empieza ' + (dias === 1 ? 'mañana' : 'en ' + dias + ' días'), cq: '' }
@@ -753,6 +741,23 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     P.push(liq.enviado ? { t: 'Liquidación', ap: 'estancia', e: 'ok', txt: 'Enviada', cq: cuandoQuien(liq.b), acc: { txt: 'Ver', fn: function () { ir('hoja/' + idq + '?modo=liquidacion&' + suf('estancia')); } }, marca: { txt: 'Deshacer', tipo: 'liquidacion_no' } }
       : { t: 'Liquidación', ap: 'estancia', e: empezo ? 'ahora' : 'pend', txt: 'Pendiente', cq: '', acc: empezo ? { txt: 'Hacer', fn: function () { ir('hoja/' + idq + '?modo=liquidacion&' + suf('estancia')); } } : null,
           marca: empezo ? { txt: 'Marcar enviada', tipo: 'liquidacion_enviada' } : null, sig: empezo ? 'Hacer y enviar la liquidación' : '' });
+    // 9. Cobrado (2.5.0: la reserva se cierra al cobrar la liquidación)
+    var cob = marcaDoc(r, 'Cobrado', 'Cobro: marcado sin cobrar');
+    P.push(cob.enviado ? { t: 'Cobrado', ap: 'estancia', e: 'ok', txt: 'Cobrado', cq: cuandoQuien(cob.b), marca: { txt: 'Deshacer: cobrado', tipo: 'cobrado_no' } }
+      : { t: 'Cobrado', ap: 'estancia', e: liq.enviado ? 'ahora' : 'pend', txt: 'Pendiente', cq: '',
+          marca: liq.enviado ? { txt: 'Marcar cobrado', tipo: 'cobrado' } : null, sig: liq.enviado ? 'Marcar el cobro de la liquidación' : '' });
+    // 10. Fianza al liquidar (solo si se pagó): se descuenta en la liquidación o se devuelve después
+    if (!sinFz && fz.pagada) {
+      var fd = ultimaNota(r, ['Fianza descontada', 'Fianza devuelta', 'Devolver fianza', 'Fianza: marca deshecha', 'Fianza: no llegó']);
+      var fdA = fd && fd.accion.indexOf('Fianza: marca deshecha') !== 0 ? fd.accion : '';
+      var deshacerFd = { txt: 'Deshacer', tipo: 'fianza_devolucion_no' };
+      if (fdA.indexOf('Fianza descontada') === 0) P.push({ t: 'Fianza al liquidar', ap: 'estancia', e: 'ok', txt: 'Descontada en la liquidación', cq: cuandoQuien(fd), marca: deshacerFd });
+      else if (fdA.indexOf('Fianza devuelta') === 0) P.push({ t: 'Fianza al liquidar', ap: 'estancia', e: 'ok', txt: 'Devuelta', cq: cuandoQuien(fd), marca: deshacerFd });
+      else if (fdA.indexOf('Devolver fianza') === 0) P.push({ t: 'Fianza al liquidar', ap: 'estancia', e: 'aviso', txt: 'Pendiente de devolver', cq: cuandoQuien(fd),
+        marcas: [{ txt: 'Marcar fianza devuelta', tipo: 'fianza_devuelta' }, deshacerFd], sig: 'Devolver la fianza' });
+      else P.push({ t: 'Fianza al liquidar', ap: 'estancia', e: empezo ? 'ahora' : 'pend', txt: empezo ? 'Decidir al liquidar' : 'Se decide al liquidar', cq: '',
+        marcas: empezo ? [{ txt: 'Todo revisado: descontarla', tipo: 'fianza_descontada' }, { txt: 'Falta revisar: devolverla después', tipo: 'fianza_por_devolver' }] : [] });
+    }
     return P;
   }
 
@@ -865,6 +870,21 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     }).catch(function (e) { cargando(false); vista.innerHTML = '<div class="vacio">' + esc(e.message) + '</div>'; enlazarVolver(null, dest, true); });
   }
 
+  /** 2.5.0: al cancelar una reserva con fianza pagada, se anota qué pasa con ella. */
+  function preguntarFianzaAlCancelar(r, despues) {
+    if (r.pagaFianza === 'No' || !senalPagada(r).pagada) return despues();
+    modal('<p><b>¿Qué pasa con la fianza?</b></p>' +
+      '<div class="fila-btns" style="flex-direction:column;align-items:stretch">' +
+      '<button class="btn" data-r="fianza_por_devolver">Hay que devolverla</button>' +
+      '<button class="btn sec" data-r="fianza_devuelta">Ya está devuelta</button>' +
+      '<button class="btn borde" data-r="fianza_no_pagada">No llegó a pagarla</button></div>' +
+      '<p class="sub" style="margin-top:10px">Después, envía al grupo el mensaje de cancelación.</p>', function (e, cerrar) {
+      var b = e.target.closest('[data-r]'); if (!b) return;
+      cerrar();
+      usarDB(function () { return DB.anotar(r.id, b.dataset.r, ''); })
+        .then(function () { toast('Anotado en la bitácora'); }).catch(function (er) { toast(er.message, true); }).then(despues);
+    });
+  }
   function anotar(r, tipoNota, texto, ok) {
     if (S.sinConexion) return toast('Sin conexión.', true);
     cargando(true);
@@ -884,9 +904,9 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if (a === 'Reparto de habitaciones') return 'Reparto de habitaciones guardado (' + b.detalle + ')';
     if (a === 'Formulario aplicado') return 'Formulario aplicado a la reserva';
     if (a === 'Aviso provisional') return 'Aviso de provisional enviado a la casa';
-    if (a === 'Aviso señal') return 'Aviso de señal pendiente enviado a la casa';
+    if (a === 'Aviso señal') return 'Aviso de fianza pendiente enviado a la casa';
     if (a === 'Aviso formulario') return 'Aviso para enviar el formulario enviado a la casa';
-    if (a === 'Comprobante de señal') return 'Comprobante de la señal recibido (' + b.detalle + ')';
+    if (a === 'Comprobante de señal') return 'Comprobante de la fianza recibido (' + b.detalle + ')';
     if (/^Firma: /.test(a)) return a + (b.detalle ? ' · ' + b.detalle : '');
     return a.replace(/^Formulario: /, 'Formulario: ');
   }
@@ -958,7 +978,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       : 'Sin alergias';
 
     var fz = senalPagada(r), fi = r.firma;
-    var senalHtml = fz.pagada ? '<span class="ficha-ok">Pagada</span>'
+    var senalHtml = r.pagaFianza === 'No' ? 'No paga' : fz.pagada ? '<span class="ficha-ok">Pagada</span>'
       : (fi && fi.comprobante) ? '<span class="ficha-ambar">Comprobante recibido</span>'
       : 'Pendiente';
 
@@ -978,7 +998,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
           '<div class="dato"><span>Correo</span><span>' + mailHtml + '</span></div>' +
           '<div class="dato"><span>Personas' + (aloj && nHabs ? ' y hab.' : '') + '</span><span>' + persHabTxt + '</span></div>' +
           '<div class="dato"><span>Alergias</span><span>' + alerHtml + '</span></div>' +
-          '<div class="dato"><span>Señal</span><span>' + senalHtml + '</span></div>' +
+          '<div class="dato"><span>Fianza</span><span>' + senalHtml + '</span></div>' +
           (!canc ? '<div class="dato"><span>Falta:</span><span>' + faltaHtml + '</span></div>' : '')
         ) : '') +
         (r.observaciones ? '<div class="dato"><span>Observaciones</span><span>' + esc(r.observaciones) + '</span></div>' : '') +
@@ -993,7 +1013,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
 
     enlazarVolver(null, origen, true);
     if ($('#dSig')) $('#dSig').onclick = function () {
-      if (sig.ap === 'condiciones' && sig.sig === 'Comprobar la señal') {
+      if (sig.ap === 'condiciones' && sig.sig === 'Comprobar la fianza') {
         ir('gestionar/' + idq + '?abrir=condiciones');
         if (sig.acc) sig.acc.fn();
         return;
@@ -1051,27 +1071,27 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     function apartado(clave, titulo, resumen, cuerpo, abierto) {
       return '<details class="apartado" data-ap="' + clave + '"' + (q.abrir === clave || abierto ? ' open' : '') + '><summary><b>' + titulo + '</b><span>' + resumen + '</span></summary><div class="ap-cuerpo">' + cuerpo + '</div></details>';
     }
-    var iCond = idxPaso('Presupuesto y condiciones'), iSen = idxPaso('Señal'), iForm = idxPaso('Formulario'), iPreAct = idxPaso('Presupuesto actualizado'), iLiq = idxPaso('Liquidación');
+    var iCond = idxPaso('Condiciones'), iSen = idxPaso('Fianza'), iForm = idxPaso('Formulario'), iLiq = idxPaso('Liquidación'), iCob = idxPaso('Cobrado'), iFzL = idxPaso('Fianza al liquidar');
+    function lineaAp(i, nombre) { return i < 0 ? '' : '<p class="sub" style="margin:14px 0 0"><b>' + nombre + ':</b> ' + esc(pasos[i].txt) + (pasos[i].cq ? ' · <small>' + esc(pasos[i].cq) + '</small>' : '') + '</p>' + botonesPaso(pasos[i], i); }
     var fTarjeta = (!bloq && !canc) ? tarjetaFormulario(r).replace(/^<div class="tarjeta"><h2>Formulario del grupo<\/h2>/, '').replace(/<\/div>$/, '') : '';
-    var condResumen = iCond >= 0 ? pasos[iCond].txt + (iSen >= 0 ? ' · Señal ' + pasos[iSen].txt.toLowerCase() : '') : '';
+    var condResumen = iCond >= 0 ? pasos[iCond].txt + (iSen >= 0 ? ' · Fianza ' + pasos[iSen].txt.toLowerCase() : (r.pagaFianza === 'No' ? ' · Sin fianza' : '')) : '';
     var condCuerpo = iCond >= 0 ? (
       '<p class="sub" style="margin:0"><b>Firma:</b> ' + esc(pasos[iCond].txt) + (pasos[iCond].cq ? ' · <small>' + esc(pasos[iCond].cq) + '</small>' : '') + '</p>' +
-      '<p class="sub" style="margin:6px 0 0;font-size:13px">El grupo recibe un enlace para ver el presupuesto, aceptar las condiciones y firmar. El pago de la señal confirma la reserva.</p>' +
+      '<p class="sub" style="margin:6px 0 0;font-size:13px">El grupo recibe un enlace para ver el presupuesto, aceptar las condiciones y firmar. ' + (r.pagaFianza === 'No' ? 'Este grupo no paga fianza: la reserva se confirma al aplicar su formulario.' : 'El pago de la fianza confirma la reserva.') + '</p>' +
       botonesPaso(pasos[iCond], iCond) +
-      (iSen >= 0 ? '<p class="sub" style="margin:14px 0 0"><b>Señal:</b> ' + esc(pasos[iSen].txt) + (pasos[iSen].cq ? ' · <small>' + esc(pasos[iSen].cq) + '</small>' : '') + '</p>' + botonesPaso(pasos[iSen], iSen) : '') +
-      (iPreAct >= 0 ? '<p class="sub" style="margin:14px 0 0"><b>Presupuesto actualizado:</b> ' + esc(pasos[iPreAct].txt) + (pasos[iPreAct].cq ? ' · <small>' + esc(pasos[iPreAct].cq) + '</small>' : '') + '</p>' + botonesPaso(pasos[iPreAct], iPreAct) : '')
+      lineaAp(iSen, 'Fianza')
     ) : '';
     vista.innerHTML = botonVolver() +
       // Apartados plegados (Datos → Presupuesto y condiciones → Formulario → Habitaciones → Hoja de estancia)
       apartado('datos', 'Datos de la reserva', esc(r.responsable || tipo(r)), datos) +
-      (iCond >= 0 ? apartado('condiciones', 'Presupuesto y condiciones', esc(condResumen), condCuerpo) : '') +
+      (iCond >= 0 ? apartado('condiciones', r.pagaFianza === 'No' ? 'Condiciones' : 'Condiciones y fianza', esc(condResumen), condCuerpo) : '') +
       (fTarjeta ? apartado('formulario', 'Formulario del grupo', esc(iForm >= 0 ? pasos[iForm].txt : ''), fTarjeta) : '') +
       (aloj && !canc ? apartado('habitaciones', 'Habitaciones', (r.asignaciones || []).length ? pernoctan(r) + ' pers. en ' + r.asignaciones.length + ' hab.' : 'Sin reparto',
         avisoReparto(r) + plano(r.asignaciones) + '<div class="fila-btns" style="margin-top:10px"><button class="btn sec" id="dReparto">Reparto de habitaciones</button>' +
         ((r.asignaciones || []).length ? '<button class="btn sec" id="dHojaHab">Hoja de habitaciones</button>' : '') + '</div>') : '') +
       (!bloq && !canc ? apartado('estancia', 'Hoja de estancia', '', '<p class="sub" style="margin:0 0 10px">' + resumenServicios(r) + '</p>' +
         '<div class="fila-btns"><button class="btn sec" id="dServ">Servicios y datos</button><button class="btn sec" id="dHoja">Ver hoja de estancia</button></div>' +
-        (iLiq >= 0 ? '<p class="sub" style="margin:14px 0 0"><b>Liquidación:</b> ' + esc(pasos[iLiq].txt) + (pasos[iLiq].cq ? ' · ' + esc(pasos[iLiq].cq) : '') + '</p>' + botonesPaso(pasos[iLiq], iLiq) : '')) : '') +
+        lineaAp(iLiq, 'Liquidación') + lineaAp(iFzL, 'Fianza') + lineaAp(iCob, 'Cobro')) : '') +
       // Evolución (solo seguimiento; al tocar una línea abre su apartado)
       (pasos.length ? '<div class="tarjeta exp-pasos"><h2>Evolución</h2>' + pasos.map(lineaPaso).join('') + '</div>' : '') +
       // Bitácora plegada con número de anotaciones
@@ -1133,7 +1153,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       };
     }
     if ($('#dCancelar')) $('#dCancelar').onclick = accion('cancelarReserva', '¿Cancelar la reserva de <b>' + esc(r.grupo) + '</b>? Se quitará del calendario y quedará marcada como cancelada en la lista de reservas.', 'Sí, cancelar', 'Reserva cancelada', function () {
-      reemplazar('reserva/' + encodeURIComponent(r.id));
+      preguntarFianzaAlCancelar(r, function () { reemplazar('reserva/' + encodeURIComponent(r.id)); });
     });
     if ($('#dBorrar')) $('#dBorrar').onclick = accion('borrarReserva', '¿<b>Borrar</b> definitivamente «' + esc(r.grupo) + '»? Desaparecerá de la app, de la lista de reservas y del calendario. <b>No se puede deshacer.</b>', 'Sí, borrar', 'Reserva borrada', function () {
       S.origenFicha = 'reservas';
@@ -1164,13 +1184,14 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var porConfirmar = !!(r && q.confirmar && r.estado === 'Provisional');
     if (porConfirmar) estado = 'Confirmada';
     var tipoSel = TIPOS.indexOf(f.tipo) >= 0 ? f.tipo : 'Alojamiento';
+    var pagaFianza = f.pagaFianza === 'No' ? 'No' : 'Sí';  // 2.5.0: fianza opcional
 
     function huellaForm(d, asigMap) {
       var t = TIPOS.indexOf(d.tipo) >= 0 ? d.tipo : 'Alojamiento';
       var est = t === 'Bloqueo' ? 'Confirmada' : (d.estado === 'Confirmada' ? 'Confirmada' : 'Provisional');
       var as = t !== 'Alojamiento' ? [] : Object.keys(asigMap).filter(function (k) { return asigMap[k] > 0; }).sort(function (a, b) { return +a - +b; }).map(function (k) { return +k + ':' + asigMap[k]; });
       return JSON.stringify([t, String(d.grupo || '').trim(), String(d.responsable || '').trim(), formatoTel(d.telefono), String(d.email || '').trim(),
-        d.entrada || '', d.horaEntrada || '12:00', d.salida || '', d.horaSalida || '16:00', est, String(d.observaciones || '').trim(), String(d.personas || ''), as.join(',')]);
+        d.entrada || '', d.horaEntrada || '12:00', d.salida || '', d.horaSalida || '16:00', est, String(d.observaciones || '').trim(), String(d.personas || ''), as.join(','), d.pagaFianza === 'No' ? 'No' : 'Sí']);
     }
     var asigBase = {}; (fBase.asignaciones || []).forEach(function (a) { asigBase[a.habitacion] = a.personas; });
     var huellaBase = huellaForm(fBase, asigBase);
@@ -1195,6 +1216,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       '<label class="campo"><span>Hora</span><input class="entrada" id="fHSal" type="time" value="' + esc(f.horaSalida) + '"></label></div>' +
       '<p class="error-txt" id="fFechasErr"></p><div class="aviso-suave" id="fSolapes" hidden></div>' +
       '<div id="fEstadoBloque"><label class="campo"><span>Estado</span></label><div class="segmento estado" id="fEstado"><button type="button" data-e="Provisional" class="b-prov">Provisional</button><button type="button" data-e="Confirmada" class="b-conf">Confirmada</button></div></div>' +
+      '<div id="fFianzaBloque" style="margin-top:12px"><label class="campo"><span>¿Paga fianza?</span></label><div class="segmento" id="fFianza"><button type="button" data-f="Sí">Sí, paga fianza</button><button type="button" data-f="No">No paga</button></div><p class="sub" id="fFianzaAyuda" style="margin:6px 0 0"></p></div>' +
       '<label class="campo" id="fPersBloque" style="margin-top:12px"><span>Personas (total del grupo)</span><input class="entrada" id="fPers" type="number" inputmode="numeric" min="0" value="' + esc(f.personas || '') + '" placeholder="Si se deja vacío, se cuentan las de las habitaciones"></label>' +
       '<label class="campo" style="margin-top:12px"><span>Observaciones</span><textarea class="entrada" id="fObs" maxlength="500" placeholder="Notas, peticiones… (más adelante: alergias y dietas)">' + esc(f.observaciones) + '</textarea></label>' +
       '</div>' +
@@ -1209,7 +1231,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         id: r ? r.id : undefined, tipo: tipoSel, grupo: $('#fGrupo').value.trim(), responsable: $('#fResp').value.trim(),
         telefono: formatoTel($('#fTel').value), email: $('#fEmail').value.trim(), entrada: $('#fEnt').value,
         horaEntrada: $('#fHEnt').value || '12:00', salida: $('#fSal').value, horaSalida: $('#fHSal').value || '16:00',
-        estado: tipoSel === 'Bloqueo' ? 'Confirmada' : estado, observaciones: $('#fObs').value.trim(), personas: $('#fPers').value
+        estado: tipoSel === 'Bloqueo' ? 'Confirmada' : estado, observaciones: $('#fObs').value.trim(), personas: $('#fPers').value,
+        pagaFianza: tipoSel === 'Bloqueo' ? 'No' : pagaFianza
       };
     }
     S.hayCambios = function () { return huellaForm(leer(), asig) !== huellaBase; };
@@ -1291,7 +1314,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       var bloq = tipoSel === 'Bloqueo';
       $('#fContacto').hidden = bloq; $('#fEstadoBloque').hidden = bloq;
       $('#fHabsBloque').hidden = tipoSel !== 'Alojamiento';
-      $('#fPersBloque').hidden = bloq;
+      $('#fPersBloque').hidden = bloq; $('#fFianzaBloque').hidden = bloq;
       $('#fTitGrupo').textContent = bloq ? 'Motivo' : 'Grupo';
       $('#fLblGrupo').textContent = bloq ? 'Motivo del bloqueo (p. ej., DESCANSO)' : 'Nombre del grupo / retiro *';
       $('#fLblEnt').textContent = bloq ? 'Desde *' : 'Entrada *'; $('#fLblSal').textContent = bloq ? 'Hasta *' : 'Salida *';
@@ -1303,6 +1326,13 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     $('#fTipo').onclick = function (e) { var b = e.target.closest('button'); if (b) { tipoSel = b.dataset.t; pintaTipo(); guardarBorrador(); } };
     function pintaEstado() { $$('#fEstado button').forEach(function (b) { b.classList.toggle('activo', b.dataset.e === estado); }); }
     $('#fEstado').onclick = function (e) { var b = e.target.closest('button'); if (b) { estado = b.dataset.e; pintaEstado(); guardarBorrador(); } };
+    function pintaFianza() {
+      $$('#fFianza button').forEach(function (b) { b.classList.toggle('activo', b.dataset.f === pagaFianza); });
+      var imp = cfgNum('contrato.senal');
+      $('#fFianzaAyuda').textContent = pagaFianza === 'No' ? 'No paga fianza: la reserva se confirma al aplicar su formulario.'
+        : 'Fianza' + (imp ? ' de ' + euros(imp) : '') + ': confirma la reserva al pagarla; se descuenta en la liquidación o se devuelve.';
+    }
+    $('#fFianza').onclick = function (e) { var b = e.target.closest('button'); if (b) { pagaFianza = b.dataset.f; pintaFianza(); guardarBorrador(); } };
     $('#fPers').oninput = pintaTotal;
 
     // Contacto: formato y avisos (sin bloquear)
@@ -1375,7 +1405,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     };
     ['#fSal', '#fHEnt', '#fHSal'].forEach(function (s) { $(s).onchange = function () { revisarFechas(); guardarBorrador(); }; });
 
-    pintaTipo(); pintaEstado(); pintaHabs(); revisarContacto();
+    pintaTipo(); pintaEstado(); pintaFianza(); pintaHabs(); revisarContacto();
     if (f.entrada) revisarFechas();
 
     $('#fGuardar').onclick = function () {
@@ -1816,17 +1846,17 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var texto = contrato
       ? 'Hola. Os enviamos el presupuesto y las condiciones de vuestra estancia en la Casa de Espiritualidad María Madre (' + fechas + '). Podéis revisarlos y aceptarlos desde el móvil en este enlace:'
       : recordar
-      ? 'Hola' + resp + '. Le recordamos la señal de ' + impSenal + ' para su reserva del ' + fechas + ' en la Casa María Madre. Puede adjuntar el comprobante en este enlace:'
+      ? 'Hola' + resp + '. Le recordamos la fianza de ' + impSenal + ' para su reserva del ' + fechas + ' en la Casa María Madre. Puede adjuntar el comprobante en este enlace:'
       : presupAct
       ? 'Hola. Le enviamos el presupuesto actualizado de su reserva del ' + fechas + ' en la Casa de Espiritualidad María Madre. Puede consultarlo en el mismo enlace:'
       : 'Hola. Para preparar vuestra estancia en la Casa de Espiritualidad María Madre (' + fechas +
       '), por favor rellenad este formulario. Podéis corregirlo con el mismo enlace hasta el día de entrada:';
     var titModal = contrato ? 'Enlace del presupuesto y las condiciones'
-      : recordar ? 'Recordar la señal'
+      : recordar ? 'Recordar la fianza'
       : presupAct ? 'Enlace del presupuesto actualizado'
       : 'Enlace del formulario';
     var asunto = (contrato ? 'Presupuesto y condiciones'
-      : recordar ? 'Recordatorio de la señal'
+      : recordar ? 'Recordatorio de la fianza'
       : presupAct ? 'Presupuesto actualizado'
       : 'Formulario') + ' de su estancia · Casa María Madre';
     if (presupAct) apuntar('presupuesto_actualizado');
@@ -2176,11 +2206,11 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   function textoFaltaPaso(r, p) {
     var fi = r.firma, f = r.formulario;
     if (p.t === 'Reserva') return 'Confirmar la reserva';
-    if (p.t === 'Presupuesto y condiciones') return p.e === 'ahora' ? 'Esperar la aceptación del presupuesto y las condiciones' : 'Enviar el presupuesto y las condiciones';
-    if (p.t === 'Señal') {
-      if (fi && fi.comprobante) return 'Comprobar la señal (comprobante recibido' + (fi.comprobanteEl ? ' el ' + legible(String(fi.comprobanteEl).slice(0, 10)) : '') + ')';
-      if (p.txt.indexOf('más de 7 días') >= 0) return 'Recordar la señal al grupo (más de 7 días desde la firma)';
-      return 'Cobrar o comprobar la señal';
+    if (p.t === 'Condiciones') return p.e === 'ahora' ? 'Esperar la aceptación del presupuesto y las condiciones' : 'Enviar el presupuesto y las condiciones';
+    if (p.t === 'Fianza') {
+      if (fi && fi.comprobante) return 'Comprobar la fianza (comprobante recibido' + (fi.comprobanteEl ? ' el ' + legible(String(fi.comprobanteEl).slice(0, 10)) : '') + ')';
+      if (p.txt.indexOf('más de 7 días') >= 0) return 'Recordar la fianza al grupo (más de 7 días desde la firma)';
+      return 'Cobrar o comprobar la fianza';
     }
     if (p.t === 'Formulario') {
       if (f && f.estado === 'Recibido') return 'Aplicar el formulario recibido' + (f.enviadoEl ? ' el ' + legible(String(f.enviadoEl).slice(0, 10)) : '');

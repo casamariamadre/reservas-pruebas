@@ -1,7 +1,7 @@
 /* Presupuesto y condiciones · Casa María Madre (2.2.0)
    Página pública: se abre con el enlace propio de cada reserva (firma.html#<enlace>).
    El responsable del grupo ve el presupuesto y las condiciones, revisa sus datos,
-   marca una sola casilla obligatoria, firma con el dedo y puede adjuntar el comprobante de la señal.
+   marca una sola casilla obligatoria, firma con el dedo y puede adjuntar el comprobante de la fianza.
    No usa ninguna clave de gestor: todo va con ese enlace, a través de database.js. */
 (function () {
   'use strict';
@@ -55,41 +55,41 @@
   }
   function svgFirma(d) { return '<svg class="ct-firma" viewBox="0 0 600 200" preserveAspectRatio="xMidYMid meet"><path d="' + esc(d) + '" fill="none" stroke="#123" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
 
-  // ---------------- Presupuesto y Pago de la señal ----------------
+  // ---------------- Presupuesto y Pago de la fianza ----------------
   function presupuesto() {
     var p = INFO.presupuesto || {}, casa = INFO.casa || {};
     if (!p.total) return '';
     return '<div class="card"><div class="card-tit pri">Presupuesto' + (p.actualizadoEl ? ' <span class="hint" style="font-weight:400">· Actualizado el ' + esc(legible(p.actualizadoEl)) + '</span>' : '') + '</div>' +
       '<div class="pre-fila"><span>Total de la estancia</span><b>' + eur(p.total) + '</b></div>' +
-      '<div class="pre-fila"><span>Señal, al aceptar</span><b>' + eur(p.senal) + '</b></div>' +
-      '<div class="pre-fila"><span>Resto, ' + (p.diasPago ? 'en los ' + esc(p.diasPago) + ' días siguientes a la salida' : 'después de la salida') + '</span><b>' + eur(p.resto) + '</b></div>' +
-      '<div class="hint" style="margin-top:6px">El resto se ajusta en la liquidación a los servicios realmente prestados.' + (casa.iban ? ' Cuenta: ' + esc(casa.iban) + '.' : '') + '</div></div>';
+      (INFO.sinFianza || !p.senal ? '' : '<div class="pre-fila"><span>Fianza, al aceptar</span><b>' + eur(p.senal) + '</b></div>') +
+      '<div class="hint" style="margin-top:6px">El importe se ajusta en la liquidación a los servicios realmente prestados; se paga ' + (p.diasPago ? 'en los ' + esc(p.diasPago) + ' días siguientes a la salida' : 'después de la salida') + '.' + (INFO.sinFianza || !p.senal ? '' : ' La fianza se descuenta en la liquidación o se devuelve después.') + (casa.iban ? ' Cuenta: ' + esc(casa.iban) + '.' : '') + '</div></div>';
   }
 
   function bloqueSenal() {
+    if (INFO.sinFianza) return '';  // 2.5.0: este grupo no paga fianza
     var s = INFO.senal || {}, p = INFO.presupuesto || {}, casa = INFO.casa || {}, r = INFO.reserva || {};
     var imp = s.importe != null ? s.importe : p.senal;
     if (!imp && !s.pagada && !s.comprobanteEl) return '';
-    var concepto = 'Señal – ' + (r.grupo || '') + ' – ' + (r.entrada ? legible(r.entrada) : '');
+    var concepto = 'Fianza – ' + (r.grupo || '') + ' – ' + (r.entrada ? legible(r.entrada) : '');
     if (s.pagada) {
-      return '<div class="card senal-box ok"><div class="card-tit">Pago de la señal</div>' +
-        '<p class="senal-msg ok">✓ Señal recibida. Su reserva está confirmada.</p></div>';
+      return '<div class="card senal-box ok"><div class="card-tit">Pago de la fianza</div>' +
+        '<p class="senal-msg ok">✓ Fianza recibida. Su reserva está confirmada.</p></div>';
     }
     var datosPago =
-      (imp ? '<div class="pre-fila"><span>Importe de la señal</span><b>' + eur(imp) + '</b></div>' : '') +
+      (imp ? '<div class="pre-fila"><span>Importe de la fianza</span><b>' + eur(imp) + '</b></div>' : '') +
       (casa.iban ? '<div class="pre-fila"><span>Cuenta (IBAN)</span><b>' + esc(casa.iban) + '</b></div>' : '') +
       '<div class="pre-fila"><span>Concepto</span><b>' + esc(concepto) + '</b></div>' +
       '<div class="pre-fila"><span>Plazo</span><b>En los 7 días siguientes a la aceptación</b></div>';
     var input = '<input type="file" id="fComp" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" hidden>';
     if (s.comprobanteEl) {
-      return '<div class="card senal-box" id="boxSenal"><div class="card-tit pri">Pago de la señal</div>' + datosPago +
+      return '<div class="card senal-box" id="boxSenal"><div class="card-tit pri">Pago de la fianza</div>' + datosPago +
         '<div class="senal-est" id="sCompMsg"><p class="senal-msg ok">✓ Comprobante recibido el ' + esc(marca(s.comprobanteEl)) + '.</p>' +
         '<div class="senal-btns"><button type="button" class="b-sec" id="bAdjuntar">Sustituir comprobante</button></div>' +
         '<div class="hint" style="margin-top:6px">PDF, JPG o PNG (máximo 5 MB).</div></div>' + input + '</div>';
     }
-    return '<div class="card senal-box" id="boxSenal"><div class="card-tit pri">Pago de la señal</div>' + datosPago +
+    return '<div class="card senal-box" id="boxSenal"><div class="card-tit pri">Pago de la fianza</div>' + datosPago +
       '<div class="senal-est" id="sCompMsg">' +
-        '<p class="senal-preg">¿Adjuntar ahora el comprobante de la señal?</p>' +
+        '<p class="senal-preg">¿Adjuntar ahora el comprobante de la fianza?</p>' +
         '<div class="senal-btns">' +
           '<button type="button" class="b-pri" id="bAdjuntar">Adjuntar comprobante</button>' +
           '<button type="button" class="b-sec" id="bMasTarde">Lo adjuntaré más tarde</button>' +

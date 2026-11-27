@@ -98,9 +98,9 @@
     var s = INFO.senal;
     if (!s || s.pagada || s.comprobante) return '';
     var r = INFO.reserva || {};
-    var concepto = 'Señal – ' + (r.grupo || '') + ' – ' + (r.entrada ? legible(r.entrada) : '');
-    return '<div class="card senal-aviso"><div class="card-tit pri">Señal pendiente</div>' +
-      '<div class="hint" style="margin-bottom:6px">Para confirmar la reserva, recuerde abonar la señal' + (s.enlaceFirma ? ' y adjuntar el comprobante' : '') + ':</div>' +
+    var concepto = 'Fianza – ' + (r.grupo || '') + ' – ' + (r.entrada ? legible(r.entrada) : '');
+    return '<div class="card senal-aviso"><div class="card-tit pri">Fianza pendiente</div>' +
+      '<div class="hint" style="margin-bottom:6px">Para confirmar la reserva, recuerde abonar la fianza' + (s.enlaceFirma ? ' y adjuntar el comprobante' : '') + ':</div>' +
       (s.importe ? '<div class="pre-fila"><span>Importe</span><b>' + eur(s.importe) + '</b></div>' : '') +
       (s.iban ? '<div class="pre-fila"><span>Cuenta (IBAN)</span><b>' + esc(s.iban) + '</b></div>' : '') +
       '<div class="pre-fila"><span>Concepto</span><b>' + esc(concepto) + '</b></div>' +
