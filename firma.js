@@ -151,7 +151,7 @@
       presupuesto() +
       '<div class="zona-firma">' +
         '<div class="zf-tit">✍ Rellene y firme aquí</div>' +
-        '<details class="zf-paso" id="dDatos"' + (completos ? '' : ' open') + '>' +
+        '<details class="zf-paso" id="dDatos" open>'  /* 2.5.1: datos siempre a la vista */ +
           '<summary><span class="zf-sum-izq" id="sDatos"></span><span class="zf-sum-der">Revisar o corregir ›</span></summary>' +
           '<div class="zf-cuerpo">' +
             '<label class="f" for="fNom">Nombre y apellidos de quien firma * <span class="falta-av" id="avNom" hidden>Falta</span></label><input id="fNom" type="text" autocomplete="name" value="' + esc(nomInicial) + '">' +

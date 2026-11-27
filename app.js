@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '2.5.0';
+  var VERSION = '2.5.1';
   var VERSION_FECHA = '28/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -667,8 +667,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     // 1. Reserva
     var conf = ultimaNota(r, ['Reserva confirmada']), crea = ultimaNota(r, ['Crear']);
     P.push(r.estado === 'Confirmada'
-      ? { t: 'Reserva', ap: 'datos', e: 'ok', txt: 'Confirmada', cq: cuandoQuien(conf) }
-      : { t: 'Reserva', ap: 'datos', e: 'ahora', txt: 'Provisional', cq: cuandoQuien(crea) || (r.creadoPor ? fechaCorta(r.creadoEl) + ' · ' + r.creadoPor : ''),
+      ? { t: 'Reserva', ap: 'datos', e: 'ok', txt: 'Hecha · confirmada', cq: cuandoQuien(conf) }
+      : { t: 'Reserva', ap: 'datos', e: 'ok', txt: 'Hecha · provisional', cq: cuandoQuien(crea) || (r.creadoPor ? fechaCorta(r.creadoEl) + ' · ' + r.creadoPor : ''),
           acc: { txt: 'Confirmar', fn: function () { ir('editar/' + idq + '?confirmar=1&' + suf('datos')); } } });
     // 2. Presupuesto y condiciones (2.2.0: solo la firma, sin la señal)
     var fi = r.firma, papel = marcaDoc(r, 'Contrato firmado en papel', 'Contrato: marcado sin firmar');
@@ -771,8 +771,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   function enviarContrato(r) {
     if (S.sinConexion) return toast('Sin conexión.', true);
     var h = calcularHoja(r);
-    var seguir = h.total > 0 ? Promise.resolve(true)
-      : confirmar('La hoja de estancia de esta reserva no tiene importe (no hay servicios). Las condiciones saldrían sin precio. ¿Enviarlas igualmente?', 'Enviar igualmente');
+    var seguir = Promise.resolve(true);  // 2.5.1: sin importe se envían igual; el presupuesto llega un mes antes
     seguir.then(function (ok) {
       if (!ok) return;
       cargando(true);
@@ -1313,7 +1312,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       $$('#fTipo button').forEach(function (b) { b.classList.toggle('activo', b.dataset.t === tipoSel); });
       var bloq = tipoSel === 'Bloqueo';
       $('#fContacto').hidden = bloq; $('#fEstadoBloque').hidden = bloq;
-      $('#fHabsBloque').hidden = tipoSel !== 'Alojamiento';
+      $('#fHabsBloque').hidden = true;  // 2.5.1: el reparto se hace en Gestionar (un mes antes); aquí solo las personas
       $('#fPersBloque').hidden = bloq; $('#fFianzaBloque').hidden = bloq;
       $('#fTitGrupo').textContent = bloq ? 'Motivo' : 'Grupo';
       $('#fLblGrupo').textContent = bloq ? 'Motivo del bloqueo (p. ej., DESCANSO)' : 'Nombre del grupo / retiro *';
@@ -1417,8 +1416,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       var asignaciones = tipoSel !== 'Alojamiento' ? [] : Object.keys(asig).filter(function (k) { return asig[k] > 0; }).map(function (k) { return { habitacion: Number(k), personas: asig[k] }; });
       var faltan = [];
       if (tipoSel !== 'Bloqueo') { if (!d.telefono) faltan.push('teléfono'); if (!d.email) faltan.push('email'); }
-      if (tipoSel === 'Alojamiento' && !asignaciones.length) faltan.push('personas en habitaciones');
-      var seguir = faltan.length ? confirmar('Falta: <b>' + faltan.join(', ') + '</b>. ¿Guardar igualmente?', 'Guardar') : Promise.resolve(true);
+      var seguir = Promise.resolve(true);  // 2.5.1: se guarda siempre; lo que falte se marca en la ficha
       seguir.then(function (ok) {
         if (!ok) return;
         cargando(true);
@@ -1490,7 +1488,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       campo('gEnt', 'Entidad (nombre legal)', g.entidad, ' maxlength="120"') + campo('gCif', 'CIF', g.cif, ' maxlength="30"') +
       campo('gDir', 'Dirección', g.direccion, ' maxlength="160"') + campo('gRep', 'Representante que firma', g.representante, ' maxlength="120"') +
       '<div class="dos">' + campo('gDni', 'DNI', g.dni, ' maxlength="30"') + campo('gCar', 'Cargo', g.cargo, ' maxlength="60"') + '</div>' +
-      campo('gSen', 'Señal pagada (€)', g.senal, ' inputmode="decimal" maxlength="12" placeholder="0"') + '</div>' +
+      campo('gSen', 'Fianza pagada (€)', g.senal, ' inputmode="decimal" maxlength="12" placeholder="0"') + '</div>' +
       '<div class="pie-form"><div class="total" id="svTotal"></div><button class="btn" id="svGuardar">Guardar</button></div>';
     enlazarVolver(null, dest, true);
     function v(idc) { var e = document.getElementById(idc); return e ? Math.max(0, Math.floor(+e.value || 0)) : 0; }
@@ -1598,7 +1596,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       (c.lineas.length ? '' : '<tr><td class="l" colspan="4">—</td></tr>') + '</table>' +
       '<div class="hd-fin"><div class="hd-cond"><b>Condiciones</b><br>Niños de 0 a ' + gratis + ' años: gratis. De ' + (gratis + 1) + ' a ' + (adulto - 1) + ' años: precio de niño. A partir de ' + adulto + ' años: como adulto.<br>' +
       (cfgNum('precio.solo_uso') != null ? 'Solo uso de la casa (calefacción, luz, agua…): ' + euros(cfgNum('precio.solo_uso')) + ' por persona.<br>' : '') + esc(cfg('texto.condiciones')) + '</div>' +
-      '<div class="hd-tot"><div><span>Total' + (c.consultar ? '*' : '') + '</span><b>' + euros(c.total) + '</b></div><div><span>Señal pagada</span><span>' + euros(c.senal) + '</span></div>' +
+      '<div class="hd-tot"><div><span>Total' + (c.consultar ? '*' : '') + '</span><b>' + euros(c.total) + '</b></div><div><span>Fianza pagada</span><span>' + euros(c.senal) + '</span></div>' +
       '<div class="hd-pend"><b>Pendiente</b><b>' + euros(c.pendiente) + '</b></div>' + (c.consultar ? '<small>* Sin incluir los conceptos «a consultar».</small>' : '') + '</div></div>' +
       '<div class="hd-pie">' + pie + '<br><span>' + (liq ? 'Cantidades realmente servidas, revisadas por el gestor.' : 'Calculado con los servicios previstos. La liquidación final se hará con lo realmente servido.') + '</span></div>' +
       '</div>';
@@ -1763,7 +1761,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         return fila++;
       }
       var fT = tot('Total' + (c.consultar ? '*' : ''), { formula: 'SUM(' + cI + fImpIni + ':' + cI + fImpFin + ')', result: c.total }, true);
-      var fS = tot('Señal pagada', c.senal);
+      var fS = tot('Fianza pagada', c.senal);
       var fP = tot('Pendiente', { formula: cI + fT + '-' + cI + fS, result: c.pendiente }, true, GRANATE);
       ws.getCell(cP + fP).border = ws.getCell(cI + fP).border = { top: { style: 'thin', color: { argb: GRANATE } } };
       if (c.consultar) { ws.getCell(cP + fila).value = '* Sin incluir los conceptos «a consultar».'; ws.getCell(cP + fila).font = { size: 8.5, color: { argb: 'FF666666' } }; ws.getCell(cP + fila).alignment = { horizontal: 'right' }; fila++; }
@@ -2265,7 +2263,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       }
     }
 
-    // 3. Dos columnas: Datos de la reserva | Presupuesto y señal
+    // 3. Dos columnas: Datos de la reserva | Presupuesto y fianza
     function valOblig(v) { var t = String(v == null ? '' : v).trim(); return t ? esc(t) : '<b class="hf-rojo">Falta</b>'; }
     function valOpc(v) { var t = String(v == null ? '' : v).trim(); return t ? esc(t) : '—'; }
     var adMax = 0, niMax = 0, beMax = 0;
@@ -2326,10 +2324,10 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var totalVigente = impAct != null ? impAct : (hojaCalc.total ? hojaCalc.total : (impIni || 0));
     var restoNum = Math.max(0, Math.round((totalVigente - impSenalNum) * 100) / 100);
     var restoTxt = totalVigente > 0 ? euros(restoNum) : '—';
-    var colPresup = '<div class="hf-col"><h4>Presupuesto y señal</h4>' +
+    var colPresup = '<div class="hf-col"><h4>Presupuesto y fianza</h4>' +
       '<div class="hf-kv"><span>Condiciones</span><span>' + esc(condTxt) + '</span></div>' +
       '<div class="hf-kv"><span>Presupuesto inicial</span><span>' + esc(preIniTxt) + '</span></div>' +
-      '<div class="hf-kv"><span>Señal</span><span>' + esc(senalTxt) + '</span></div>' +
+      '<div class="hf-kv"><span>Fianza</span><span>' + esc(senalTxt) + '</span></div>' +
       '<div class="hf-kv"><span>Comprobante</span><span>' + esc(compTxt) + '</span></div>' +
       '<div class="hf-kv"><span>Presupuesto actualizado</span><span>' + esc(preActTxt) + '</span></div>' +
       '<div class="hf-kv"><span>Resto estimado</span><span><b>' + esc(restoTxt) + '</b></span></div>' +
@@ -2431,7 +2429,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     cfg.forEach(function (a) { orig[a.clave] = a.valor; if (!por[a.grupo]) { por[a.grupo] = []; grupos.push(a.grupo); } por[a.grupo].push(a); });
     function campo(a) {
       var id = 'ad_' + a.clave.replace(/\W/g, '_');
-      var etiqueta = esc(a.descripcion) + (a.tipo === 'euros' ? ' (€)' : '');
+      var etiqueta = esc(String(a.descripcion || '').replace(/Señal de reserva/g, 'Fianza').replace(/Señal/g, 'Fianza').replace(/señal/g, 'fianza')) + (a.tipo === 'euros' ? ' (€)' : '');
       if (a.tipo === 'largo') return '<label class="campo"><span>' + etiqueta + '</span><textarea class="entrada" id="' + id + '" data-k="' + esc(a.clave) + '" maxlength="' + (a.clave === 'texto.contrato' ? 30000 : 4000) + '"' + (String(a.valor || '').length > 400 ? ' rows="' + (a.clave === 'texto.contrato' ? 20 : 10) + '"' : '') + '>' + esc(a.valor) + '</textarea></label>';
       var extra = a.tipo === 'euros' ? ' inputmode="decimal" placeholder="a consultar"' : a.tipo === 'num' ? ' inputmode="numeric"' : ' maxlength="120"';
       return '<label class="campo"><span>' + etiqueta + '</span><input class="entrada" id="' + id + '" data-k="' + esc(a.clave) + '" value="' + esc(a.valor) + '"' + extra + ' autocomplete="off"></label>';
