@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '2.5.2';
+  var VERSION = '2.5.3';
   var VERSION_FECHA = '28/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -837,8 +837,15 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       var x = esc(b.x);
       return b.t === 'h' ? '<h3 class="ct-h">' + x + '</h3>' : b.t === 'c' ? '<h4 class="ct-c">' + x + '</h4>' : b.t === 'd' ? '<p class="ct-d">' + x + '</p>' : '<p>' + x + '</p>';
     }).join('');
+    // 2.5.3: el presupuesto resumido va al principio (un solo PDF con presupuesto y condiciones)
+    var R = doc.presupuesto, pp = R && R.personas, nP = pp ? pp.adultos + pp.ninos + pp.bebes : 0;
+    var pre = nP ? '<h3 class="ct-h">PRESUPUESTO</h3><p><b>' + nP + ' personas</b> · ' + pp.adultos + ' adultos · ' + pp.ninos + ' niños · ' + pp.bebes + ' bebés</p>' +
+      '<table style="width:100%;border-collapse:collapse;margin:4px 0">' + (R.lineas || []).map(function (l) { return '<tr><td style="padding:3px 0">' + esc(l.txt) + '</td><td style="text-align:right">' + euros(l.imp) + '</td></tr>'; }).join('') +
+      '<tr><td style="padding:3px 0;border-top:1px solid #999"><b>Total previsto</b></td><td style="text-align:right;border-top:1px solid #999"><b>' + euros(R.total) + '</b></td></tr>' +
+      '<tr><td style="padding:3px 0">Total por persona' + (R.pagantes !== nP ? ' (entre ' + R.pagantes + ' que pagan)' : '') + '</td><td style="text-align:right">' + (R.pagantes ? euros(R.porPersona) : '—') + '</td></tr></table>' +
+      '<p><small>Es una estimación. Un mes antes se actualizará este presupuesto.</small></p>' : '';
     var firmaSvg = d.firma ? '<svg class="ct-firma" viewBox="0 0 600 200" preserveAspectRatio="xMidYMid meet"><path d="' + esc(d.firma) + '" fill="none" stroke="#123" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '<div class="ct-firma vacia"></div>';
-    return '<div class="hoja-doc contrato-doc">' + cuerpo +
+    return '<div class="hoja-doc contrato-doc">' + pre + cuerpo +
       '<h3 class="ct-h">INFORMACIÓN ' + (c.basico ? 'COMPLETA ' : '') + 'SOBRE PROTECCIÓN DE DATOS</h3>' + String(c.datos || '').split(/\n+/).map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') +
       (c.imagenes ? '<p><b>' + (d.firmado && d.imagenes ? '☑' : '☐') + '</b> ' + esc(c.imagenes) + '</p>' : '') +
       (c.comunicaciones ? '<p><b>' + (d.firmado && (d.comunicaciones || doc.comunicaciones) ? '☑' : '☐') + '</b> ' + esc(c.comunicaciones) + '</p>' : '') +

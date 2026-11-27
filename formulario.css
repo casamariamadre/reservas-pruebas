@@ -138,3 +138,23 @@ body.fg-final .fg-grupo, body.fg-final .fg-cab { border-bottom: 0; }
 .senal-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .senal-btns button { min-height: 44px; border-radius: 10px; font-size: 14.5px; font-weight: 700; padding: 8px 14px; cursor: pointer; flex: 1 1 160px; }
 .b-enl-firma { display: inline-block; color: #85200C; font-weight: 700; font-size: 13.5px; text-decoration: underline; padding: 4px 0; }
+
+/* 2.5.3 · Presupuesto resumido, personas y comidas que puede quitar el grupo, aviso de estimación */
+.pre-pers { font-size: 14px; padding: 6px 0 8px; border-bottom: 1px solid #eee; }
+.pre-total { border-top: 2px solid #85200C; border-bottom: 1px solid #eee; margin-top: 2px; }
+.pre-edit { background: #FBF7F1; border: 1px solid #EEE3D3; border-radius: 10px; padding: 8px 10px; margin: 6px 0 10px; }
+.pre-edit .paso-fila { min-height: 50px; }
+.pre-edit .paso-fila .t { font-size: 14px; }
+.chips-dia { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 0; }
+.chips-f { min-width: 52px; font-size: 13px; font-weight: 700; color: #555; }
+.chip { border: 1px solid #85200C; background: #fff; color: #85200C; border-radius: 16px; padding: 7px 12px; font-size: 14px; cursor: pointer; }
+.chip.off { border-color: #bbb; color: #999; text-decoration: line-through; background: #f3f3f3; }
+.fg-modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
+.fg-modal-caja { background: #fff; border-radius: 14px; padding: 18px; max-width: 340px; width: 100%; font-size: 15px; }
+.fg-modal-caja p { margin: 0 0 10px; }
+.fg-modal-caja .b-pri { width: 100%; padding: 12px; border-radius: 10px; font-size: 16px; }
+.ct-pre { margin-bottom: 14px; }
+@media print {
+  #fgVista > *:not(.imprimir-solo) { display: none !important; }
+  .fg-modal { display: none !important; }
+}

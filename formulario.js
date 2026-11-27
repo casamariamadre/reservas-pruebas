@@ -7,7 +7,9 @@
   var $ = function (s) { return document.querySelector(s); };
   var $$ = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
   var vista = $('#fgVista'), pie = $('#fgPie');
-  var COMIDAS = [['Desayuno', '09:00'], ['Comida', '14:00'], ['Cena', '21:00']];
+  // 2.5.3: las horas vienen de Administración › Horarios de las comidas
+  function hora(sv, def) { var v = aj('hora.' + sv.toLowerCase()).trim(); if (/^\d:\d{2}$/.test(v)) v = '0' + v; return /^\d{2}:\d{2}$/.test(v) ? v : def; }
+  function comidas() { return [['Desayuno', hora('Desayuno', '09:00')], ['Comida', hora('Comida', '14:00')], ['Cena', hora('Cena', '21:00')]]; }
   var DSEM = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
   var INFO = null, F = null, paso = 1;
 
@@ -46,9 +48,9 @@
   function aloj() { return INFO.reserva.tipo === 'Alojamiento'; }
   /** Servicios que caen dentro del horario de la estancia: { 'fecha|servicio': true } */
   function serviciosPosibles() {
-    var r = INFO.reserva, ds = dias(), out = {};
+    var r = INFO.reserva, ds = dias(), out = {}, he = r.horaEntrada || '12:00', hs = r.horaSalida || '16:00';
     ds.forEach(function (t, i) {
-      COMIDAS.forEach(function (c) { if ((t > r.entrada || c[1] >= r.horaEntrada) && (t < r.salida || c[1] < r.horaSalida)) out[t + '|' + c[0]] = true; });
+      comidas().forEach(function (c) { if ((t > r.entrada || c[1] >= he) && (t < r.salida || c[1] <= hs)) out[t + '|' + c[0]] = true; });
       if (aloj() && i < ds.length - 1) out[t + '|Noche'] = true;
     });
     return out;
@@ -136,7 +138,7 @@
 
   function paso2() {
     var ds = dias(), pos = serviciosPosibles();
-    var filas = COMIDAS.map(function (c) { return c[0]; }).concat(aloj() ? ['Noche'] : []).map(function (sv) {
+    var filas = comidas().map(function (c) { return c[0]; }).concat(aloj() ? ['Noche'] : []).map(function (sv) {
       return '<tr><th class="l">' + sv + '</th>' + ds.map(function (t) {
         var k = t + '|' + sv;
         return '<td>' + (pos[k] ? '<input type="text" inputmode="numeric" data-sv="' + k + '" aria-label="' + sv + ' ' + corto(t) + '" value="' + (F.servMap[k] || 0) + '">' : '—') + '</td>';
@@ -204,6 +206,23 @@
     });
     return { total: Math.round(total * 100) / 100, falta: falta, tot: tot };
   }
+  /** 2.5.3: presupuesto resumido (una línea por servicio, total y total por persona entre los que pagan). */
+  function htmlPresupuesto() {
+    var p = F.personas, c = calculo(), t = c.tot, n = totalPersonas();
+    if (!n) return '<div class="card"><div class="card-tit pri">Presupuesto estimado</div><p class="hint" style="margin:0">Sin número de personas no se puede hacer el presupuesto.</p></div>';
+    var filas = [['Desayuno', 'desayuno', 'Desayunos'], ['Comida', 'comida', 'Comidas'], ['Cena', 'cena', 'Cenas'], ['Noche', 'noche', 'Alojamiento']].map(function (k) {
+      var x = t[k[0]]; if (!x) return '';
+      var pa = precio('precio.adulto.' + k[1]), pn = precio('precio.nino.' + k[1]);
+      return '<div class="pre-fila"><span>' + k[2] + '</span><b>' + eur(x.a * (pa || 0) + x.n * (pn || 0)) + '</b></div>';
+    }).join('');
+    function paga(edad) { return ['desayuno', 'comida', 'cena', 'noche'].some(function (k) { return (precio('precio.' + edad + '.' + k) || 0) > 0; }); }
+    var pagan = (paga('adulto') ? p.adultos : 0) + (paga('nino') ? p.ninos : 0);
+    return '<div class="card"><div class="card-tit pri">Presupuesto estimado</div>' +
+      '<div class="pre-pers"><b>' + n + ' personas</b> · ' + p.adultos + ' adultos · ' + p.ninos + ' niños · ' + p.bebes + ' bebés</div>' + filas +
+      '<div class="pre-fila pre-total"><span><b>Total previsto</b></span><b>' + eur(c.total) + '</b></div>' +
+      '<div class="pre-fila"><span>Total por persona' + (pagan !== n ? ' <span class="hint">(entre ' + pagan + ' que pagan)</span>' : '') + '</span><b>' + (pagan ? eur(c.total / pagan) : '—') + '</b></div>' +
+      '<div class="hint" style="margin-top:6px">Es una estimación de alojamiento y comidas' + (c.falta ? ' (algún precio, a consultar)' : '') + '; las salas se presupuestan aparte. La Casa le enviará el presupuesto actualizado con estos datos.' + (p.bebes ? ' Los bebés (0 a ' + (aj('edad.gratis_hasta') || 4) + ' años) no pagan.' : '') + '</div></div>';
+  }
   function paso4() {
     var p = F.personas, c = calculo(), t = c.tot;
     var serv = [];
@@ -228,7 +247,7 @@
       '<b>Salas:</b> ' + (Object.keys(salas).map(function (k) { return k.toLowerCase() + ' (' + salas[k].join(', ') + ')'; }).join(', ') || '—') + '<br>' +
       (aloj() ? '<b>Habitaciones:</b> ' + (hab.join(', ') || '—') + '<br>' : '') +
       '<b>Alergias:</b> ' + (al.length ? al.map(function (a, i) { return letra(i) + ': ' + a.alergenos.concat(a.otras ? [a.otras] : []).join(', '); }).join(' · ') : 'ninguna') + '<br>' +
-      '<b>Importe estimado:</b> ' + euros + ' <span class="hint">(alojamiento y comidas; sin salas' + (p.bebes ? '; los de 0 a ' + (aj('edad.gratis_hasta') || 4) + ' años, gratis' : '') + (c.falta ? '; algún precio a consultar' : '') + ')</span></div>' +
+      '</div>' + htmlPresupuesto() +
       // 2.1.0: sin casillas; solo la información básica de protección de datos y un enlace a la completa
       '<div class="card"><div class="card-tit">Protección de datos</div>' +
       '<div class="hint" style="margin-bottom:4px">' + esc(TX.basico || 'Los datos se usan solo para gestionar su estancia en la Casa.') + '</div>' +

@@ -1,4 +1,4 @@
-/* Presupuesto y condiciones · Casa María Madre (2.2.0)
+/* Presupuesto y condiciones · Casa María Madre (2.5.3)
    Página pública: se abre con el enlace propio de cada reserva (firma.html#<enlace>).
    El responsable del grupo ve el presupuesto y las condiciones, revisa sus datos,
    marca una sola casilla obligatoria, firma con el dedo y puede adjuntar el comprobante de la fianza.
@@ -8,7 +8,7 @@
   var TOKEN = decodeURIComponent((location.hash || '').replace(/^#/, ''));
   var $ = function (s) { return document.querySelector(s); };
   var vista = $('#fgVista'), pie = $('#fgPie');
-  var INFO = null, trazos = [];
+  var INFO = null, trazos = [], ED = null, avisoVisto = false;
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function legible(t) { var p = String(t).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
@@ -21,6 +21,9 @@
     if (!d.abierto) return mensaje('Enlace no disponible', d.motivo || 'Para cualquier cosa, contacte con la Casa.', d.casa);
     $('#fgGrupo').textContent = d.reserva.grupo + ' · ' + legible(d.reserva.entrada) + ' a ' + legible(d.reserva.salida);
     if (d.firmado) return yaFirmado();
+    // 2.5.3: si el grupo aún no envió el formulario, puede poner sus personas y quitar comidas
+    if (d.editable) ED = { pax: Object.assign({ adultos: 0, ninos: 0, bebes: 0 }, d.editable.pax), quitadas: {} };
+    if (ED) (d.editable.quitadas || []).forEach(function (k) { ED.quitadas[k] = true; });
     pintar();
   }).catch(function (e) {
     mensaje(e.codigo === 'ENLACE' ? 'Enlace no válido' : 'No se pudo abrir', e.message || 'Inténtelo de nuevo más tarde.');
@@ -43,7 +46,8 @@
       return b.t === 'h' ? '<h3 class="ct-h">' + x + '</h3>' : b.t === 'c' ? '<h4 class="ct-c">' + x + '</h4>' : b.t === 'd' ? '<p class="ct-d">' + x + '</p>' : '<p>' + x + '</p>';
     }).join('');
     var casa = INFO.casa || {};
-    return '<div class="contrato-doc">' + cuerpo +
+    var pre = doc.presupuesto ? '<h3 class="ct-h">PRESUPUESTO</h3><div class="ct-pre">' + htmlResumen(doc.presupuesto, true) + '</div>' : '';  // 2.5.3: un solo PDF
+    return '<div class="contrato-doc">' + pre + cuerpo +
       '<h3 class="ct-h">INFORMACIÓN COMPLETA SOBRE PROTECCIÓN DE DATOS</h3>' + String(c.datos || '').split(/\n+/).map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') +
       (c.imagenes ? '<p><b>' + (imagenes ? '☑' : '☐') + '</b> ' + esc(c.imagenes) + '</p>' : '') +
       (c.comunicaciones ? '<p><b>' + (comunicaciones ? '☑' : '☐') + '</b> ' + esc(c.comunicaciones) + '</p>' : '') +
@@ -55,21 +59,93 @@
   }
   function svgFirma(d) { return '<svg class="ct-firma" viewBox="0 0 600 200" preserveAspectRatio="xMidYMid meet"><path d="' + esc(d) + '" fill="none" stroke="#123" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
 
-  // ---------------- Presupuesto y Pago de la fianza ----------------
+  // ---------------- Presupuesto (2.5.3: resumido, con total por persona) ----------------
+  var DSEM = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+  function corto(t) { var p = t.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]); return DSEM[d.getDay()] + ' ' + d.getDate(); }
+  function totalPax(p) { return p ? (p.adultos || 0) + (p.ninos || 0) + (p.bebes || 0) : 0; }
+  /** Mismo cálculo que la Casa (resumenPresupuesto_): una línea por servicio y total por persona entre los que pagan. */
+  function resumenLocal() {
+    var e = INFO.editable, pr = e.precios || {}, pax = ED.pax, lista = [];
+    if (totalPax(pax)) e.huecos.forEach(function (h) { if (h.servicio !== 'Noche' && ED.quitadas[h.fecha + '|' + h.servicio]) return; lista.push({ servicio: h.servicio, adultos: pax.adultos, ninos: pax.ninos }); });
+    function precio(k) { var v = String(pr[k] == null ? '' : pr[k]).replace(',', '.').trim(); return v === '' || isNaN(+v) ? null : +v; }
+    function r2(n) { return Math.round(n * 100) / 100; }
+    var lineas = [], total = 0, consultar = false;
+    [['Desayuno', 'desayuno', 'Desayunos'], ['Comida', 'comida', 'Comidas'], ['Cena', 'cena', 'Cenas'], ['Noche', 'noche', 'Alojamiento']].forEach(function (c) {
+      var pa = precio('precio.adulto.' + c[1]), pn = precio('precio.nino.' + c[1]), imp = 0, hay = false;
+      lista.forEach(function (x) { if (x.servicio !== c[0]) return; hay = true; if ((x.adultos && pa == null) || (x.ninos && pn == null)) consultar = true; imp += x.adultos * (pa || 0) + x.ninos * (pn || 0); });
+      if (hay) { lineas.push({ txt: c[2], imp: r2(imp) }); total += imp; }
+    });
+    [['Salón', 'salon'], ['Salas', 'salas'], ['Capilla', 'capilla'], ['Garaje', 'garaje']].forEach(function (c) {
+      var dias = (e.fijas || []).filter(function (x) { return x.servicio === c[0]; }).length; if (!dias) return;
+      var p = precio('precio.' + c[1]), txt = c[0] + ' (' + dias + (dias === 1 ? ' día' : ' días') + ')';
+      if (p == null) { consultar = true; lineas.push({ txt: txt, imp: null }); } else { lineas.push({ txt: txt, imp: r2(dias * p) }); total += dias * p; }
+    });
+    function paga(edad) { return ['desayuno', 'comida', 'cena', 'noche'].some(function (k) { return (precio('precio.' + edad + '.' + k) || 0) > 0; }); }
+    var pagantes = (paga('adulto') ? pax.adultos : 0) + (paga('nino') ? pax.ninos : 0);
+    total = r2(total);
+    return { personas: { adultos: pax.adultos, ninos: pax.ninos, bebes: pax.bebes }, total: total, lineas: lineas, pagantes: pagantes,
+      porPersona: pagantes ? r2(total / pagantes) : 0, consultar: consultar, gratisHasta: pr['edad.gratis_hasta'] || 4 };
+  }
+  function resumenActual() { return ED ? resumenLocal() : INFO.resumen; }
+  var SIN_PAX = 'Sin número de personas no se puede hacer el presupuesto. Se actualizará al confirmar los detalles, un mes antes de la llegada.';
+  /** Las líneas del presupuesto (también para el PDF). */
+  function htmlResumen(R, enDoc) {
+    var p = R && R.personas;
+    if (!R || !totalPax(p)) return '<p class="hint" style="margin:0">' + SIN_PAX + '</p>';
+    return '<div class="pre-pers"><b>' + totalPax(p) + ' personas</b> · ' + p.adultos + ' adultos · ' + p.ninos + ' niños · ' + p.bebes + ' bebés</div>' +
+      (R.lineas || []).map(function (l) { return '<div class="pre-fila"><span>' + esc(l.txt) + '</span><b>' + (l.imp == null ? 'a consultar' : eur(l.imp)) + '</b></div>'; }).join('') +
+      '<div class="pre-fila pre-total"><span><b>Total previsto</b></span><b>' + eur(R.total) + '</b></div>' +
+      '<div class="pre-fila"><span>Total por persona' + (R.pagantes !== totalPax(p) ? ' <span class="hint">(entre ' + R.pagantes + ' que pagan)</span>' : '') + '</span><b>' + (R.pagantes ? eur(R.porPersona) : '—') + '</b></div>' +
+      '<div class="hint" style="margin:4px 0 6px">Es una estimación' + (R.consultar ? ' (algún precio, a consultar)' : '') + '. Un mes antes se actualizará este presupuesto.' + (p.bebes ? ' Los bebés (0 a ' + esc(R.gratisHasta || 4) + ' años) no pagan.' : '') + '</div>';
+  }
+  function stepper(k, v, tit) {
+    return '<div class="paso-fila"><div class="t">' + tit + '</div><div class="stp"><button type="button" data-px="' + k + '" data-d="-1" aria-label="Quitar uno: ' + tit + '">−</button><output>' + v + '</output>' +
+      '<button type="button" data-px="' + k + '" data-d="1" aria-label="Añadir uno: ' + tit + '">+</button></div></div>';
+  }
+  function htmlEditar() {
+    var e = INFO.editable, pr = e.precios || {}, g = pr['edad.gratis_hasta'] || 4, ad = pr['edad.adulto_desde'] || 9;
+    var html = '<div class="pre-edit"><div class="hint" style="margin-bottom:4px">¿Cuántas personas vendrán? Solo el número.</div>' +
+      stepper('adultos', ED.pax.adultos, 'Adultos <span class="hint">(desde ' + esc(ad) + ' años)</span>') +
+      stepper('ninos', ED.pax.ninos, 'Niños <span class="hint">(' + (+g + 1) + ' a ' + (+ad - 1) + ' años)</span>') +
+      stepper('bebes', ED.pax.bebes, 'Bebés <span class="hint">(0 a ' + esc(g) + ' años, gratis)</span>');
+    var comidas = e.huecos.filter(function (h) { return h.servicio !== 'Noche'; });
+    if (totalPax(ED.pax) && comidas.length) {
+      var porDia = {}; comidas.forEach(function (h) { (porDia[h.fecha] = porDia[h.fecha] || []).push(h.servicio); });
+      html += '<div class="hint" style="margin:10px 0 4px">Comidas previstas. Toque una para quitarla si no la necesitan.</div>' +
+        Object.keys(porDia).sort().map(function (f) {
+          return '<div class="chips-dia"><span class="chips-f">' + corto(f) + '</span>' + porDia[f].map(function (sv) {
+            var k = f + '|' + sv, off = !!ED.quitadas[k];
+            return '<button type="button" class="chip' + (off ? ' off' : '') + '" data-cm="' + k + '" aria-pressed="' + !off + '">' + (off ? '' : '✓ ') + sv + '</button>';
+          }).join('') + '</div>';
+        }).join('');
+    }
+    return html + '</div>';
+  }
   function presupuesto() {
-    var p = INFO.presupuesto || {}, casa = INFO.casa || {};
-    // 2.5.2 (D27): sin personas (o sin importe) no hay presupuesto todavía
-    if (!INFO.personas || !p.total) return '<div class="card"><div class="card-tit pri">Presupuesto</div>' +
-      '<p class="hint" style="margin:0">Todavía no hay número de personas, así que no se puede hacer el presupuesto. Se actualizará al confirmar los detalles, un mes antes de la llegada.</p></div>';
-    var filas = (p.lineas || []).map(function (l) {
-      return '<div class="pre-fila"><span>' + esc(l.txt) + ' (' + l.u + ')</span><b>' + (l.imp == null ? 'a consultar' : eur(l.imp)) + '</b></div>';
-    }).join('');
-    return '<div class="card"><div class="card-tit pri">Presupuesto' + (p.actualizadoEl ? ' <span class="hint" style="font-weight:400">· Actualizado el ' + esc(legible(p.actualizadoEl)) + '</span>' : '') + '</div>' +
-      filas +
-      '<div class="pre-fila"><span><b>Total previsto</b> · ' + INFO.personas + ' personas</span><b>' + eur(p.total) + '</b></div>' +
-      '<div class="hint" style="margin:4px 0 6px">Un mes antes se actualizará este presupuesto.</div>' +
-      (INFO.sinFianza || !p.senal ? '' : '<div class="pre-fila"><span>Fianza, al aceptar</span><b>' + eur(p.senal) + '</b></div>') +
+    var p = INFO.presupuesto || {}, casa = INFO.casa || {}, R = resumenActual();
+    var fianza = INFO.sinFianza || !p.senal ? '' : '<div class="pre-fila"><span>Fianza, al aceptar</span><b>' + eur(p.senal) + '</b></div>';
+    return '<div class="card" id="cPre"><div class="card-tit pri">Presupuesto' + (p.actualizadoEl ? ' <span class="hint" style="font-weight:400">· Actualizado el ' + esc(legible(p.actualizadoEl)) + '</span>' : '') + '</div>' +
+      (ED ? htmlEditar() : '') + htmlResumen(R) + fianza +
       '<div class="hint" style="margin-top:6px">El importe se ajusta en la liquidación a los servicios realmente prestados; se paga ' + (p.diasPago ? 'en los ' + esc(p.diasPago) + ' días siguientes a la salida' : 'después de la salida') + '.' + (INFO.sinFianza || !p.senal ? '' : ' La fianza se descuenta en la liquidación o se devuelve después.') + (casa.iban ? ' Cuenta: ' + esc(casa.iban) + '.' : '') + '</div></div>';
+  }
+  function repintarPresupuesto() {
+    var c = $('#cPre'); if (!c) return;
+    c.outerHTML = presupuesto(); enlazarPresupuesto();
+  }
+  function avisoEstimacion() {
+    if (avisoVisto) return; avisoVisto = true;
+    var m = document.createElement('div'); m.className = 'fg-modal';
+    m.innerHTML = '<div class="fg-modal-caja"><p><b>Es una estimación.</b></p><p>Un mes antes se actualizará este presupuesto.</p><button type="button" class="b-pri">Entendido</button></div>';
+    document.body.appendChild(m);
+    m.querySelector('button').onclick = function () { m.remove(); };
+  }
+  function enlazarPresupuesto() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-px]'), function (b) {
+      b.onclick = function () { var k = b.dataset.px; ED.tocado = true; ED.pax[k] = Math.max(0, Math.min(999, (ED.pax[k] || 0) + (+b.dataset.d))); repintarPresupuesto(); avisoEstimacion(); };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-cm]'), function (b) {
+      b.onclick = function () { var k = b.dataset.cm; ED.tocado = true; if (ED.quitadas[k]) delete ED.quitadas[k]; else ED.quitadas[k] = true; repintarPresupuesto(); };
+    });
   }
 
   function bloqueSenal() {
@@ -194,6 +270,7 @@
     $('#aCond').onclick = function (e) { e.preventDefault(); e.stopPropagation(); var d = $('#doc'); d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
     $('#kAcepto').onchange = function () { if (this.checked && !$('#dFirma').open) $('#dFirma').open = true; };
     actualizarHuecos();
+    if (ED) enlazarPresupuesto();
     prepararPad();
     $('#bBorrar').onclick = function () { trazos = []; dibujar(); actualizarResumenFirma(); };
     $('#bFirmar').onclick = enviar;
@@ -268,7 +345,12 @@
     if (!hayFirma()) { $('#dFirma').open = true; $('#dFirma').scrollIntoView({ behavior: 'smooth', block: 'center' }); return toast('Firme con el dedo dentro del recuadro.', true); }
     var b = $('#bFirmar'); b.disabled = true; b.textContent = 'Firmando…';
     var firma = rutaFirma(), img = !!($('#kImg') && $('#kImg').checked), com = !!($('#kCom') && $('#kCom').checked);
-    DB.enviarFirma(TOKEN, { nombre: nom, telefono: tel, email: mail, entidad: ent, dni: dni, cargo: car, domicilio: dom, cif: cif, acepto: true, imagenes: img, comunicaciones: com, firma: firma }).then(function (r) {
+    var datos = { nombre: nom, telefono: tel, email: mail, entidad: ent, dni: dni, cargo: car, domicilio: dom, cif: cif, acepto: true, imagenes: img, comunicaciones: com, firma: firma };
+    var R = resumenActual();
+    if (ED && ED.tocado) { datos.pax = ED.pax; datos.quitadas = Object.keys(ED.quitadas); }
+    DB.enviarFirma(TOKEN, datos).then(function (r) {
+      INFO.resumen = R; ED = null;  // 2.5.3: queda el presupuesto aceptado
+      INFO.documento.presupuesto = totalPax(R && R.personas) ? R : null;
       INFO.firmado = { firmadoEl: r.recibido || r.firmadoEl, nombre: nom, dni: dni, cargo: car, domicilio: dom, cif: cif, entidad: ent, imagenes: img, comunicaciones: com, firma: firma,
         documento: INFO.documento };
       fin();
