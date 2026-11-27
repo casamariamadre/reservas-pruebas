@@ -62,6 +62,7 @@
   // ---------------- Presupuesto (2.5.3: resumido, con total por persona) ----------------
   var DSEM = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
   function corto(t) { var p = t.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]); return DSEM[d.getDay()] + ' ' + d.getDate(); }
+  function pl(n, s, p) { return n + ' ' + (n === 1 ? s : p); }
   function totalPax(p) { return p ? (p.adultos || 0) + (p.ninos || 0) + (p.bebes || 0) : 0; }
   /** Mismo cálculo que la Casa (resumenPresupuesto_): una línea por servicio y total por persona entre los que pagan. */
   function resumenLocal() {
@@ -92,15 +93,16 @@
   function htmlResumen(R, enDoc) {
     var p = R && R.personas;
     if (!R || !totalPax(p)) return '<p class="hint" style="margin:0">' + SIN_PAX + '</p>';
-    return '<div class="pre-pers"><b>' + totalPax(p) + ' personas</b> · ' + p.adultos + ' adultos · ' + p.ninos + ' niños · ' + p.bebes + ' bebés</div>' +
+    return '<div class="pre-pers"><b>' + pl(totalPax(p), 'persona', 'personas') + '</b> · ' + pl(p.adultos, 'adulto', 'adultos') + ' · ' + pl(p.ninos, 'niño', 'niños') + ' · ' + pl(p.bebes, 'bebé', 'bebés') + '</div>' +
       (R.lineas || []).map(function (l) { return '<div class="pre-fila"><span>' + esc(l.txt) + '</span><b>' + (l.imp == null ? 'a consultar' : eur(l.imp)) + '</b></div>'; }).join('') +
       '<div class="pre-fila pre-total"><span><b>Total previsto</b></span><b>' + eur(R.total) + '</b></div>' +
       '<div class="pre-fila"><span>Total por persona' + (R.pagantes !== totalPax(p) ? ' <span class="hint">(entre ' + R.pagantes + ' que pagan)</span>' : '') + '</span><b>' + (R.pagantes ? eur(R.porPersona) : '—') + '</b></div>' +
       '<div class="hint" style="margin:4px 0 6px">Es una estimación' + (R.consultar ? ' (algún precio, a consultar)' : '') + '. Un mes antes se actualizará este presupuesto.' + (p.bebes ? ' Los bebés (0 a ' + esc(R.gratisHasta || 4) + ' años) no pagan.' : '') + '</div>';
   }
   function stepper(k, v, tit) {
-    return '<div class="paso-fila"><div class="t">' + tit + '</div><div class="stp"><button type="button" data-px="' + k + '" data-d="-1" aria-label="Quitar uno: ' + tit + '">−</button><output>' + v + '</output>' +
-      '<button type="button" data-px="' + k + '" data-d="1" aria-label="Añadir uno: ' + tit + '">+</button></div></div>';
+    var et = tit.replace(/<[^>]+>/g, '').replace(/"/g, '');
+    return '<div class="paso-fila"><div class="t">' + tit + '</div><div class="stp"><button type="button" data-px="' + k + '" data-d="-1" aria-label="Quitar uno: ' + et + '">−</button><output>' + v + '</output>' +
+      '<button type="button" data-px="' + k + '" data-d="1" aria-label="Añadir uno: ' + et + '">+</button></div></div>';
   }
   function htmlEditar() {
     var e = INFO.editable, pr = e.precios || {}, g = pr['edad.gratis_hasta'] || 4, ad = pr['edad.adulto_desde'] || 9;
@@ -352,7 +354,7 @@
       INFO.resumen = R; ED = null;  // 2.5.3: queda el presupuesto aceptado
       INFO.documento.presupuesto = totalPax(R && R.personas) ? R : null;
       INFO.firmado = { firmadoEl: r.recibido || r.firmadoEl, nombre: nom, dni: dni, cargo: car, domicilio: dom, cif: cif, entidad: ent, imagenes: img, comunicaciones: com, firma: firma,
-        documento: INFO.documento };
+        documento: r.documento || INFO.documento };
       fin();
     }).catch(function (e) {
       b.disabled = false; b.textContent = 'Aceptar y firmar';

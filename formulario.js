@@ -207,6 +207,7 @@
     return { total: Math.round(total * 100) / 100, falta: falta, tot: tot };
   }
   /** 2.5.3: presupuesto resumido (una línea por servicio, total y total por persona entre los que pagan). */
+  function pl(n, s, p) { return n + ' ' + (n === 1 ? s : p); }
   function htmlPresupuesto() {
     var p = F.personas, c = calculo(), t = c.tot, n = totalPersonas();
     if (!n) return '<div class="card"><div class="card-tit pri">Presupuesto estimado</div><p class="hint" style="margin:0">Sin número de personas no se puede hacer el presupuesto.</p></div>';
@@ -218,7 +219,7 @@
     function paga(edad) { return ['desayuno', 'comida', 'cena', 'noche'].some(function (k) { return (precio('precio.' + edad + '.' + k) || 0) > 0; }); }
     var pagan = (paga('adulto') ? p.adultos : 0) + (paga('nino') ? p.ninos : 0);
     return '<div class="card"><div class="card-tit pri">Presupuesto estimado</div>' +
-      '<div class="pre-pers"><b>' + n + ' personas</b> · ' + p.adultos + ' adultos · ' + p.ninos + ' niños · ' + p.bebes + ' bebés</div>' + filas +
+      '<div class="pre-pers"><b>' + pl(n, 'persona', 'personas') + '</b> · ' + pl(p.adultos, 'adulto', 'adultos') + ' · ' + pl(p.ninos, 'niño', 'niños') + ' · ' + pl(p.bebes, 'bebé', 'bebés') + '</div>' + filas +
       '<div class="pre-fila pre-total"><span><b>Total previsto</b></span><b>' + eur(c.total) + '</b></div>' +
       '<div class="pre-fila"><span>Total por persona' + (pagan !== n ? ' <span class="hint">(entre ' + pagan + ' que pagan)</span>' : '') + '</span><b>' + (pagan ? eur(c.total / pagan) : '—') + '</b></div>' +
       '<div class="hint" style="margin-top:6px">Es una estimación de alojamiento y comidas' + (c.falta ? ' (algún precio, a consultar)' : '') + '; las salas se presupuestan aparte. La Casa le enviará el presupuesto actualizado con estos datos.' + (p.bebes ? ' Los bebés (0 a ' + (aj('edad.gratis_hasta') || 4) + ' años) no pagan.' : '') + '</div></div>';

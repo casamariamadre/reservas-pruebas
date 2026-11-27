@@ -839,7 +839,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     }).join('');
     // 2.5.3: el presupuesto resumido va al principio (un solo PDF con presupuesto y condiciones)
     var R = doc.presupuesto, pp = R && R.personas, nP = pp ? pp.adultos + pp.ninos + pp.bebes : 0;
-    var pre = nP ? '<h3 class="ct-h">PRESUPUESTO</h3><p><b>' + nP + ' personas</b> · ' + pp.adultos + ' adultos · ' + pp.ninos + ' niños · ' + pp.bebes + ' bebés</p>' +
+    var pre = nP ? '<h3 class="ct-h">PRESUPUESTO</h3><p><b>' + nP + (nP === 1 ? ' persona' : ' personas') + '</b> · ' + pp.adultos + (pp.adultos === 1 ? ' adulto' : ' adultos') + ' · ' + pp.ninos + (pp.ninos === 1 ? ' niño' : ' niños') + ' · ' + pp.bebes + (pp.bebes === 1 ? ' bebé' : ' bebés') + '</p>' +
       '<table style="width:100%;border-collapse:collapse;margin:4px 0">' + (R.lineas || []).map(function (l) { return '<tr><td style="padding:3px 0">' + esc(l.txt) + '</td><td style="text-align:right">' + euros(l.imp) + '</td></tr>'; }).join('') +
       '<tr><td style="padding:3px 0;border-top:1px solid #999"><b>Total previsto</b></td><td style="text-align:right;border-top:1px solid #999"><b>' + euros(R.total) + '</b></td></tr>' +
       '<tr><td style="padding:3px 0">Total por persona' + (R.pagantes !== nP ? ' (entre ' + R.pagantes + ' que pagan)' : '') + '</td><td style="text-align:right">' + (R.pagantes ? euros(R.porPersona) : '—') + '</td></tr></table>' +
