@@ -86,7 +86,7 @@ body.fg-final .fg-grupo, body.fg-final .fg-cab { border-bottom: 0; }
 .ct-firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; font-size: 14px; }
 .ct-firmas small { color: #555; }
 .ct-firma { display: block; width: 100%; height: 80px; border-bottom: 1px solid #333; margin: 4px 0 6px; }
-.pad { display: block; width: 100%; height: 170px; border: 2px dashed #B9AFA4; border-radius: 10px; background: #fff; touch-action: none; }
+.pad { display: block; width: 100%; height: auto; aspect-ratio: 3 / 1; border: 2px dashed #B9AFA4; border-radius: 10px; background: #fff; touch-action: none; }
 .b-link { background: none; border: 0; color: #85200C; font-weight: 700; font-size: 14px; padding: 8px 4px; cursor: pointer; }
 .b-sec.b-fin { background: #fff; border: 1px solid #85200C; color: #85200C; }
 .imprimir-solo { display: none; }
@@ -121,7 +121,7 @@ body.fg-final .fg-grupo, body.fg-final .fg-cab { border-bottom: 0; }
 .zf-firma-sum { font-size: 15px; font-weight: 700; color: #85200C; }
 .zf-firma-sum.ok { color: #1F5F3A; }
 .zf-firma-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.zona-firma .pad { height: 220px; }
+.zona-firma .pad { height: auto; } /* 2.4.1: recuadro 3:1, igual que las coordenadas de la firma (600 × 200) */
 .cond-plegable > summary { list-style: none; cursor: pointer; padding: 12px 14px; font-size: 14px; font-weight: 700; color: #85200C; min-height: 44px; display: flex; align-items: center; justify-content: space-between; }
 .cond-plegable > summary::-webkit-details-marker { display: none; }
 .cond-plegable[open] > summary { border-bottom: 1px solid #E0D9CF; }
