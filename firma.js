@@ -313,7 +313,8 @@
     medir(); window.addEventListener('resize', medir);
     $('#dFirma').addEventListener('toggle', function () { if (this.open) medir(); });
     var actual = null;
-    function punto(e) { var r = pad.getBoundingClientRect(); return [Math.round((e.clientX - r.left) / r.width * 600), Math.round((e.clientY - r.top) / r.height * 200)]; }
+    function limitar(v, max) { return Math.max(0, Math.min(max, Math.round(v))); }
+    function punto(e) { var r = pad.getBoundingClientRect(); return [limitar((e.clientX - r.left) / r.width * 600, 600), limitar((e.clientY - r.top) / r.height * 200, 200)]; }
     pad.addEventListener('pointerdown', function (e) { e.preventDefault(); pad.setPointerCapture(e.pointerId); actual = [punto(e)]; trazos.push(actual); dibujar(); actualizarResumenFirma(); });
     pad.addEventListener('pointermove', function (e) { if (!actual) return; e.preventDefault(); var p = punto(e), u = actual[actual.length - 1]; if (Math.abs(p[0] - u[0]) + Math.abs(p[1] - u[1]) >= 2) { actual.push(p); dibujar(); actualizarResumenFirma(); } });
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) { pad.addEventListener(ev, function () { actual = null; actualizarResumenFirma(); }); });
@@ -331,10 +332,20 @@
     });
   }
   function rutaFirma() {
-    return trazos.map(function (t) {
-      var pts = t.length === 1 ? [t[0], [t[0][0] + 1, t[0][1] + 1]] : t;
-      return pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0] + ' ' + p[1]; }).join(' ');
-    }).join(' ');
+    function textoRuta(lista) {
+      return lista.map(function (t) {
+        var pts = t.length === 1 ? [t[0], [t[0][0] < 600 ? t[0][0] + 1 : 599, t[0][1] < 200 ? t[0][1] + 1 : 199]] : t;
+        return pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0] + ' ' + p[1]; }).join(' ');
+      }).join(' ');
+    }
+    var lista = trazos, s = textoRuta(lista);
+    while (s.length > 36000 && lista.some(function (t) { return t.length > 2; })) {
+      lista = lista.map(function (t) {
+        return t.length <= 2 ? t : t.filter(function (p, i) { return i === 0 || i === t.length - 1 || i % 2 === 0; });
+      });
+      s = textoRuta(lista);
+    }
+    return s;
   }
 
   function enviar() {
@@ -345,8 +356,9 @@
     if (nom.length < 2) { $('#dDatos').open = true; $('#fNom').focus(); return toast('Escriba su nombre para firmar.', true); }
     if (!$('#kAcepto').checked) return toast('Marque la casilla obligatoria para poder firmar.', true);
     if (!hayFirma()) { $('#dFirma').open = true; $('#dFirma').scrollIntoView({ behavior: 'smooth', block: 'center' }); return toast('Firme con el dedo dentro del recuadro.', true); }
-    var b = $('#bFirmar'); b.disabled = true; b.textContent = 'Firmando…';
     var firma = rutaFirma(), img = !!($('#kImg') && $('#kImg').checked), com = !!($('#kCom') && $('#kCom').checked);
+    if (firma.length < 20 || firma.length > 40000 || !/^[ML0-9 .]+$/.test(firma)) { $('#dFirma').open = true; $('#dFirma').scrollIntoView({ behavior: 'smooth', block: 'center' }); return toast('Dibuje su firma en el recuadro.', true); }
+    var b = $('#bFirmar'); b.disabled = true; b.textContent = 'Firmando…';
     var datos = { nombre: nom, telefono: tel, email: mail, entidad: ent, dni: dni, cargo: car, domicilio: dom, cif: cif, acepto: true, imagenes: img, comunicaciones: com, firma: firma };
     var R = resumenActual();
     if (ED && ED.tocado) { datos.pax = ED.pax; datos.quitadas = Object.keys(ED.quitadas); }

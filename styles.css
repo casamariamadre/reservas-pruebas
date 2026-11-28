@@ -1074,3 +1074,37 @@ h3 { font-size: 0.8125rem; }
     text-align: center;
   }
 }
+
+/* ===================== v2.5.7 · D33: una sola ventana activa ===================== */
+.capa-inactiva {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(31, 26, 23, .62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+  overflow-y: auto;
+}
+.capa-inactiva-caja {
+  background: var(--tarjeta);
+  color: var(--texto);
+  border: 1px solid var(--linea);
+  border-radius: 20px;
+  box-shadow: var(--sombra);
+  width: 100%;
+  max-width: 420px;
+  padding: 22px 18px;
+  text-align: center;
+}
+.capa-inactiva-caja h2 {
+  font-size: 1.1875rem;
+  margin: 0 0 8px;
+  color: var(--pri);
+}
+.capa-inactiva-caja .sub {
+  margin: 0 0 16px;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}

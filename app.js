@@ -3,9 +3,9 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '2.5.6';
+  var VERSION = '2.5.7';
   var VERSION_FECHA = '28/11/2026';
-  var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
+  var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, inactiva: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
   var $ = function (s, el) { return (el || document).querySelector(s); };
   var $$ = function (s, el) { return Array.prototype.slice.call((el || document).querySelectorAll(s)); };
@@ -75,6 +75,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   function telValido(t) { return /^(\+\d{2} )?\d{3} \d{3} \d{3}$/.test(formatoTel(t)); }
 
   function toast(msg, error) {
+    if (S.inactiva) return;
     var t = $('#toast');
     t.textContent = msg; t.className = 'toast' + (error ? ' error' : ''); t.hidden = false;
     clearTimeout(toast._t);
@@ -108,6 +109,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   // ---------------- Datos (todo pasa por database.js) ----------------
   /** Ejecuta una operación de database.js con el gestor actual y guarda el estado actualizado que devuelve. */
   function usarDB(fn) {
+    if (S.inactiva) return Promise.reject(new Error(''));
     DB.conectar({ gestor: S.gestor, clave: S.clave });
     return fn().then(function (r) { if (r && r.estado) fijarDatos(r.estado); return r; });
   }
@@ -135,6 +137,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
 
   /** Recarga datos. Si se está editando una reserva NO se redibuja (para no perder lo escrito). */
   function recargar(silencioso, forzar) {
+    if (S.inactiva) return Promise.resolve();
     if (!silencioso) cargando(true);
     return cargarTodo().then(function () { if (forzar || !editando()) pintar(); })
       .catch(function (e) {
@@ -2847,11 +2850,67 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   // Al volver a la app (si han pasado más de 2 minutos): comprobar con el reloj y luego mostrar.
   // Si se está escribiendo en un formulario, no se toca nada.
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden || !S.clave || !S.datos || editando()) return;
+    if (S.inactiva || document.hidden || !S.clave || !S.datos || editando()) return;
     if (Date.now() - (S.ultimaCarga || 0) < 120000) return;
     recargar(true); // comprobación de fondo: sin reloj
   });
   avisoConexion();
+
+  // 2.5.7 (D33): una sola ventana activa («manda la última»).
+  (function controlarVentanaActiva() {
+    var idVentana = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
+    var canal = null;
+    try { if (typeof BroadcastChannel !== 'undefined') canal = new BroadcastChannel('mmp-ventana'); } catch (e) {}
+    var capa = null;
+    function haySinGuardar() {
+      return (typeof S.hayCambios === 'function' ? !!S.hayCambios() : editando()) ||
+        (!$('#modal').hidden && !!($('#notaTxt') && $('#notaTxt').value.trim()));
+    }
+    function avisarActiva() {
+      if (canal) { try { canal.postMessage({ activa: idVentana }); } catch (e) {} }
+      else { try { localStorage.setItem('mmp:ventanaActiva', JSON.stringify({ activa: idVentana, t: Date.now() })); } catch (e) {} }
+    }
+    function tapar() {
+      S.inactiva = true;
+      cargando(false);
+      $('#toast').hidden = true;
+      if (!capa) {
+        capa = document.createElement('div');
+        capa.id = 'capaInactiva';
+        capa.className = 'capa-inactiva';
+        capa.setAttribute('role', 'dialog');
+        capa.setAttribute('aria-modal', 'true');
+        document.body.appendChild(capa);
+      }
+      var sinGuardar = haySinGuardar();
+      capa.innerHTML = '<div class="capa-inactiva-caja">' +
+        '<h2>La app está abierta en otra ventana</h2>' +
+        '<p class="sub">Para no mezclar cambios, solo se trabaja en una.</p>' +
+        (sinGuardar ? '<p class="aviso-suave" style="margin:12px 0">En esta ventana hay cambios sin guardar. Pulse «Usar aquí» para seguir con ellos.</p>' : '') +
+        '<button type="button" class="btn ancho" id="btnUsarAqui">Usar aquí</button>' +
+        '</div>';
+      capa.hidden = false;
+      try { $('#app').inert = true; $('#modal').inert = true; } catch (e) {}
+      $('#btnUsarAqui').onclick = activarAqui;
+    }
+    function activarAqui() {
+      var sinGuardar = haySinGuardar();
+      S.inactiva = false;
+      if (capa) capa.hidden = true;
+      try { $('#app').inert = false; $('#modal').inert = false; } catch (e) {}
+      avisarActiva();
+      if (S.clave && !sinGuardar) recargar(true);
+    }
+    if (canal) {
+      canal.onmessage = function (e) { if (e && e.data && e.data.activa && e.data.activa !== idVentana) tapar(); };
+    } else {
+      window.addEventListener('storage', function (e) {
+        if (e.key !== 'mmp:ventanaActiva' || !e.newValue) return;
+        try { var d = JSON.parse(e.newValue); if (d && d.activa && d.activa !== idVentana) tapar(); } catch (x) {}
+      });
+    }
+    avisarActiva();
+  })();
 
   S.clave = lsGet('clave'); S.gestor = lsGet('gestor');
   // Al abrir: primero se comprueban los datos (con el reloj) y luego se muestra la pantalla, una sola vez.
