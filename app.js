@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '2.5.7';
+  var VERSION = '2.6.0';
   var VERSION_FECHA = '28/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, inactiva: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -211,11 +211,10 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
   function ir(h) { if (location.hash === '#/' + h) pintar(); else location.hash = '/' + h; }
   function reemplazar(h) { if (location.hash === '#/' + h) pintar(); else location.replace('#/' + h); }
-  var historial = 0;
-  window.addEventListener('hashchange', function () { historial++; });
+  var historial = 0, ultimoHash = location.hash;
   function volver() { if (historial > 0 && history.length > 1) history.back(); else ir('calendario'); }
   /** 2.3.4: Pregunta antes de salir si la pantalla actual tiene cambios sin guardar. */
-  function salirSiSinCambios(continuar) {
+  function salirSiSinCambios(continuar, alSeguir) {
     if (typeof S.hayCambios !== 'function' || !S.hayCambios()) return continuar();
     modal('<p>Hay cambios sin guardar. ¿Salir sin guardar?</p><div class="fila-btns"><button class="btn borde" data-r="0">Seguir editando</button>' +
       '<button class="btn peligro" data-r="1">Salir sin guardar</button></div>',
@@ -223,7 +222,9 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         var b = e.target.closest('[data-r]'); if (!b) return;
         cerrar();
         if (b.dataset.r === '1') { S.hayCambios = null; continuar(); }
+        else if (alSeguir) alSeguir();
       });
+    if (alSeguir) $('#modal').addEventListener('click', function f(e) { if (e.target === this) { this.removeEventListener('click', f); alSeguir(); } });
   }
   /** 2.3.3: Destino al que vuelven «‹ Volver» y «Guardar» en las pantallas de trabajo de una reserva. */
   function destinoTrabajo(id, apPorDefecto) {
@@ -250,6 +251,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     }).observe(vista, { childList: true });
   })();
   function enlazarVolver(antes, destino, usarReplace) {
+    S.alDescartar = antes || null;
     var pie = vista.querySelector('.pie-form') || $('#app > .pie-form');  // 2.1.1: puede estar ya anclada
     var b = '<button type="button" class="btn borde js-volver">‹ Volver</button>';
     if (pie) { if (!pie.querySelector('.js-volver')) pie.insertAdjacentHTML('afterbegin', b); }
@@ -257,6 +259,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     $$('.js-volver').forEach(function (x) {
       x.onclick = function () {
         salirSiSinCambios(function () {
+          S.alDescartar = null;
           if (antes) antes();
           if (destino) { if (usarReplace) reemplazar(destino); else ir(destino); }
           else volver();
@@ -266,9 +269,11 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   }
 
   function pintar() {
+    ultimoHash = location.hash;
     if (!S.clave) return pintarLogin();
     if (!S.datos) return;
     S.hayCambios = null;
+    S.alDescartar = null;
     $$('#app > .pie-form').forEach(function (x) { x.remove(); });
     var r = ruta();
     if (r.vista === 'calendario' || r.vista === 'reservas') S.origenFicha = r.vista;
@@ -699,18 +704,19 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   // ---------------- Plano ----------------
   var PLANO_SUP = [11, 12, 'ESCALERAS', 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
   var PLANO_INF = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 'ESC. / ASC.', 25, 24, 23];
-  function plano(asig) {
-    var map = {}; (asig || []).forEach(function (a) { map[a.habitacion] = a.personas; });
+  function plano(asig, r) {
+    var map = {}, oc = r ? ocupadasPorOtras(r) : {};
+    (asig || []).forEach(function (a) { map[a.habitacion] = a.personas; });
     function celda(x) {
       if (typeof x === 'string') return '<div class="hab esc"' + (x === 'ESCALERAS' ? ' style="grid-column:span 2"' : '') + '>' + x + '</div>';
       var h = hab(x); if (!h) return '<div class="hab"></div>';
-      var p = map[x] || 0;
-      var cls = h.estado !== 'Disponible' ? 'cerrada' : p >= h.capacidad ? 'llena' : p > 0 ? 'usada' : '';
-      return '<div class="hab ' + cls + '"><b>' + x + '</b>' + (h.estado !== 'Disponible' ? '—' : p + '/' + h.capacidad) + '</div>';
+      var p = map[x] || 0, noDisp = h.estado !== 'Disponible' || !!oc[x];
+      var cls = noDisp ? 'cerrada no-disp' : p >= h.capacidad ? 'llena' : p > 0 ? 'usada' : '';
+      return '<div class="hab ' + cls + '"><b>' + x + '</b>' + (noDisp ? '—<span class="hab-x" aria-hidden="true">✕</span>' : p + '/' + h.capacidad) + '</div>';
     }
     return '<div class="plano"><div class="plano-fila">' + PLANO_SUP.map(celda).join('') + '</div>' +
       '<div class="pasillo">PASILLO</div><div class="plano-fila">' + PLANO_INF.map(celda).join('') + '</div></div>' +
-      '<div class="leyenda"><span><i style="background:var(--ok-suave);border:1.5px solid var(--ok)"></i>Completa</span><span><i style="background:var(--pri-suave);border:1.5px solid var(--pri-2)"></i>Parcial</span><span><i style="background:#e6e6e6"></i>Cerrada</span></div>';
+      '<div class="leyenda"><span><i style="background:var(--ok-suave);border:1.5px solid var(--ok)"></i>Completa</span><span><i style="background:var(--pri-suave);border:1.5px solid var(--pri-2)"></i>Parcial</span><span><i class="ley-nodisp">✕</i>No disponible</span></div>';
   }
 
   // ---------------- Detalle ----------------
@@ -993,7 +999,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if (a === 'Cancelar') return 'Reserva cancelada';
     if (a === 'Nota') return '📝 ' + b.detalle;
     if (a === 'Reparto de habitaciones') return 'Reparto de habitaciones guardado (' + b.detalle + ')';
-    if (a === 'Formulario aplicado') return 'Formulario aplicado a la reserva';
+    if (a === 'Formulario aplicado') { var mf = (b.detalle || '').match(/ · \d+ hab\. propuestas/); return 'Formulario aplicado a la reserva' + (mf ? mf[0] : ''); }
     if (a === 'Aviso provisional') return 'Aviso de provisional enviado a la casa';
     if (a === 'Aviso señal') return 'Aviso de fianza pendiente enviado a la casa';
     if (a === 'Aviso formulario') return 'Aviso para enviar el formulario enviado a la casa';
@@ -1008,7 +1014,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var sem = aFecha(f).toLocaleDateString('es-ES', { weekday: 'long' });
     return sem + ' ' + legible(f) + (h ? ', ' + h : '');
   }
-  /** 2.3.0: Resumen de personas (adultos y niños) de una reserva. */
+  /** 2.3.0 / 2.6.0: Resumen de personas (adultos, niños y bebés) de una reserva. */
   function textoPersonas(r) {
     var adMax = 0, niMax = 0, beMax = 0;
     var fDat = r.formulario && r.formulario.datos;
@@ -1024,11 +1030,12 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       niMax = fDat.personas.ninos || 0;
       beMax = fDat.personas.bebes || 0;
     }
-    var ninosTot = niMax + beMax;
-    if (adMax || ninosTot) {
-      var tot = r.personas || (adMax + ninosTot);
-      var des = [adMax + ' adulto' + (adMax === 1 ? '' : 's')];
-      if (ninosTot) des.push(ninosTot + ' niño' + (ninosTot === 1 ? '' : 's'));
+    if (adMax || niMax || beMax) {
+      var tot = r.personas || (adMax + niMax + beMax);
+      var des = [];
+      if (adMax || (!niMax && !beMax)) des.push(adMax + ' adulto' + (adMax === 1 ? '' : 's'));
+      if (niMax) des.push(niMax + ' niño' + (niMax === 1 ? '' : 's'));
+      if (beMax) des.push(beMax + ' bebé' + (beMax === 1 ? '' : 's'));
       return tot + ' (' + des.join(' · ') + ')';
     }
     return (r.personas || 0) + ' persona' + ((r.personas || 0) === 1 ? '' : 's');
@@ -1168,7 +1175,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var condResumen = iCond >= 0 ? pasos[iCond].txt + (iSen >= 0 ? ' · Fianza ' + pasos[iSen].txt.toLowerCase() : (r.pagaFianza === 'No' ? ' · Sin fianza' : '')) : '';
     var condCuerpo = iCond >= 0 ? (
       '<p class="sub" style="margin:0"><b>Firma:</b> ' + esc(pasos[iCond].txt) + (pasos[iCond].cq ? ' · <small>' + esc(pasos[iCond].cq) + '</small>' : '') + '</p>' +
-      '<p class="sub" style="margin:6px 0 0;font-size:13px">El grupo recibe un enlace para ver el presupuesto, aceptar las condiciones y firmar. ' + (r.pagaFianza === 'No' ? 'Este grupo no paga fianza: la reserva se confirma al aplicar su formulario.' : 'El pago de la fianza confirma la reserva.') + '</p>' +
+      '<p class="sub" style="margin:6px 0 0;font-size:13px">El grupo recibe un enlace para ver el presupuesto, aceptar las condiciones y firmar. ' + (r.pagaFianza === 'No' ? 'Este grupo no paga fianza: la reserva se confirma al aceptar las condiciones.' : 'El pago de la fianza confirma la reserva.') + '</p>' +
       botonesPaso(pasos[iCond], iCond) +
       lineaAp(iSen, 'Fianza')
     ) : '';
@@ -1178,7 +1185,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       (iCond >= 0 ? apartado('condiciones', r.pagaFianza === 'No' ? 'Condiciones' : 'Condiciones y fianza', esc(condResumen), condCuerpo) : '') +
       (fTarjeta ? apartado('formulario', 'Formulario del grupo', esc(iForm >= 0 ? pasos[iForm].txt : ''), fTarjeta) : '') +
       (aloj && !canc ? apartado('habitaciones', 'Habitaciones', (r.asignaciones || []).length ? pernoctan(r) + ' pers. en ' + r.asignaciones.length + ' hab.' : 'Sin reparto',
-        avisoReparto(r) + plano(r.asignaciones) + '<div class="fila-btns" style="margin-top:10px"><button class="btn sec" id="dReparto">Reparto de habitaciones</button>' +
+        avisoReparto(r) + plano(r.asignaciones, r) + '<div class="fila-btns" style="margin-top:10px"><button class="btn sec" id="dReparto">Reparto de habitaciones</button>' +
         ((r.asignaciones || []).length ? '<button class="btn sec" id="dHojaHab">Hoja de habitaciones</button><button class="btn sec" id="dLimpieza">Relación para limpieza</button>' : '') + '</div>') : '') +
       (!bloq && !canc ? apartado('estancia', 'Hoja de estancia', '', '<p class="sub" style="margin:0 0 10px">' + resumenServicios(r) + '</p>' +
         '<div class="fila-btns"><button class="btn sec" id="dServ">Servicios y datos</button><button class="btn sec" id="dHoja">Ver hoja de estancia</button></div>' +
@@ -1355,7 +1362,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     function filaHab(h, oc) {
       var p = asig[h.numero] || 0, cerrada = h.estado !== 'Disponible', otra = oc[h.numero];
       return '<div class="item' + (cerrada || otra ? ' cerrada' : '') + '" data-n="' + h.numero + '">' +
-        '<div class="nom"><b>Hab. ' + h.numero + '</b><small>' + esc(h.tipo) + ' · ' + esc(h.camas) + (cerrada ? ' · CERRADA' : '') + (otra ? ' · ocupada por «' + esc(otra) + '»' : '') + '</small></div>' +
+        '<div class="nom"><b>' + (cerrada || otra ? '<span class="x-nodisp">✕</span> ' : '') + 'Hab. ' + h.numero + '</b><small>' + esc(h.tipo) + ' · ' + esc(h.camas) + (cerrada ? ' · CERRADA' : '') + (otra ? ' · ocupada por «' + esc(otra) + '»' : '') + '</small></div>' +
         (cerrada || otra ? '<span class="sub">No disponible</span>' :
           '<div class="paso"><button type="button" data-d="-1" aria-label="Quitar"' + (p <= 0 ? ' disabled' : '') + '>−</button>' +
           '<output class="' + (p >= h.capacidad ? 'lleno' : '') + '">' + p + '/' + h.capacidad + '</output>' +
@@ -1425,7 +1432,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     function pintaFianza() {
       $$('#fFianza button').forEach(function (b) { b.classList.toggle('activo', b.dataset.f === pagaFianza); });
       var imp = cfgNum('contrato.senal');
-      $('#fFianzaAyuda').textContent = pagaFianza === 'No' ? 'No paga fianza: la reserva se confirma al aplicar su formulario.'
+      $('#fFianzaAyuda').textContent = pagaFianza === 'No' ? 'No paga fianza: la reserva se confirma cuando el grupo acepta el presupuesto y las condiciones.'
         : 'Fianza' + (imp ? ' de ' + euros(imp) : '') + ': confirma la reserva al pagarla; se descuenta en la liquidación o se devuelve.';
     }
     $('#fFianza').onclick = function (e) { var b = e.target.closest('button'); if (b) { pagaFianza = b.dataset.f; pintaFianza(); guardarBorrador(); } };
@@ -2174,7 +2181,9 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       (r.servicios && r.servicios.length ? '<p class="sub" style="margin:8px 0 0;font-size:13px">Al aplicar se sustituyen los servicios que tiene ahora la reserva.</p>' : '') + '</div>' +
       (tipo(r) === 'Alojamiento' ? '<div class="tarjeta"><h2>Habitaciones (preferencias)</h2>' +
         fila('Matrimonios', h.matrimonios) + fila('Comparten', h.comparten) + fila('Individuales', h.individual) + fila('Jóvenes en literas', h.literas) +
-        (h.movilidad ? fila('Movilidad reducida (se reparte como «comparten»)', h.movilidad) : '') + (h.observaciones ? fila('Observaciones', h.observaciones) : '') +
+        (h.movilidad ? fila('Movilidad reducida (se reparte como «comparten»)', h.movilidad) : '') +
+        (Array.isArray(h.eleccion) && h.eleccion.length ? '<div class="dato"><span>Habitaciones que proponen</span><span>' + esc(h.eleccion.map(function (a) { return a.habitacion + ' (' + a.personas + ')'; }).join(', ') + ' · ' + h.eleccion.reduce(function (s, a) { return s + (a.personas || 0); }, 0) + (h.eleccion.reduce(function (s, a) { return s + (a.personas || 0); }, 0) === 1 ? ' persona' : ' personas')) + '</span></div>' : '') +
+        (h.observaciones ? fila('Observaciones', h.observaciones) : '') +
         '<p class="sub" style="margin:8px 0 0;font-size:13px">Se guardan para el reparto de habitaciones (no cambian las habitaciones asignadas).</p></div>' : '') +
       '<div class="tarjeta"><h2>Alergias</h2>' + ((d.alergias || []).length ? d.alergias.map(function (a) {
         return '<div class="dato"><span>Persona ' + esc(a.persona) + '</span><span>' + esc(a.alergenos.concat(a.otras ? [a.otras] : []).join(', ')) + '</span></div>';
@@ -2228,10 +2237,11 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   function repartoSegun(r) { return (r.asignaciones || []).reduce(function (m, a) { return a.segun && a.segun > m ? a.segun : m; }, ''); }
   function avisoReparto(r) {
     var f = r.formulario, hay = (r.asignaciones || []).length;
-    if (!f || !f.datos || !pideGrupo(r) || r.estado === 'Cancelada') return '';
+    var elec = f && f.datos && f.datos.habitaciones && Array.isArray(f.datos.habitaciones.eleccion) && f.datos.habitaciones.eleccion.length;
+    if (!f || !f.datos || (!pideGrupo(r) && !elec) || r.estado === 'Cancelada') return '';
     var seg = repartoSegun(r);
-    if (!hay) return '<div class="aviso-suave">El grupo indicó cómo quiere repartirse. Pulse «Reparto de habitaciones» para ver la propuesta.</div>';
-    if (seg && f.enviadoEl > seg) return '<div class="aviso-suave">El grupo volvió a enviar su formulario el ' + marcaCorta(f.enviadoEl) + '. Revise el reparto («Volver a proponer»).</div>';
+    if (!hay) return '<div class="aviso-suave">' + (elec ? 'El grupo eligió sus habitaciones. Pulse «Reparto de habitaciones» para revisarlas y guardarlas.' : 'El grupo indicó cómo quiere repartirse. Pulse «Reparto de habitaciones» para ver la propuesta.') + '</div>';
+    if (seg && f.enviadoEl > seg) return '<div class="aviso-suave">El grupo volvió a enviar su formulario el ' + marcaCorta(f.enviadoEl) + '. Revise el reparto (' + (elec ? '«Cargar la propuesta del grupo»' : '«Volver a proponer»') + ').</div>';
     return '';
   }
 
@@ -2299,6 +2309,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var dest = destinoTrabajo(id, 'habitaciones');
     if (!r || tipo(r) !== 'Alojamiento') { vista.innerHTML = botonVolver() + '<div class="vacio">Esta reserva no tiene alojamiento.</div>'; enlazarVolver(null, dest, true); return; }
     var pide = pideGrupo(r), f = r.formulario;
+    var elecGrupo = (f && f.datos && f.datos.habitaciones && Array.isArray(f.datos.habitaciones.eleccion) && f.datos.habitaciones.eleccion.length) ? f.datos.habitaciones.eleccion : null;
     var lista = (r.asignaciones || []).map(function (a) { return { habitacion: a.habitacion, personas: a.personas, uso: a.uso || '', manual: !!a.manual, segun: a.segun || '' }; });
     var segun = repartoSegun(r), cambiado = false, aviso = '';
     S.hayCambios = function () { return cambiado; };
@@ -2307,6 +2318,24 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       if (pide) return pide;
       var n = (r.personas || 0) - ((r.servicios || []).reduce(function (m, x) { return Math.max(m, x.bebes || 0); }, 0));
       return { Matrimonio: 0, Compartida: Math.max(0, n), Individual: 0, 'Jóvenes': 0 };
+    }
+    function cargarPropuesta() {
+      var oc = ocupadasPorOtras(r), noDisp = [], nueva = [];
+      (elecGrupo || []).forEach(function (a) {
+        var h = hab(a.habitacion);
+        if (!h || h.estado !== 'Disponible' || oc[a.habitacion]) { noDisp.push(a.habitacion); return; }
+        var p = Math.max(1, Math.min(h.capacidad, Number(a.personas) || 1));
+        nueva.push({ habitacion: a.habitacion, personas: p, uso: '', manual: false, segun: f && f.enviadoEl ? f.enviadoEl : '' });
+      });
+      segun = f && f.enviadoEl ? f.enviadoEl : '';
+      lista = nueva;
+      cambiado = true;
+      var msgNo = noDisp.length === 1
+        ? '<div class="aviso-suave" style="border-color:#B42318">La habitación ' + noDisp[0] + ' que pidió el grupo ya no está disponible.</div>'
+        : noDisp.length > 1
+          ? '<div class="aviso-suave" style="border-color:#B42318">Las habitaciones ' + noDisp.join(', ') + ' que pidió el grupo ya no están disponibles.</div>'
+          : '';
+      aviso = msgNo + '<div class="aviso-ok">Este es el reparto que propone el grupo' + (f && f.enviadoEl ? ' (' + marcaCorta(f.enviadoEl) + ')' : '') + '. Puede cambiarlo y pulsar «Guardar reparto».</div>';
     }
     function proponer() {
       var fijas = lista.filter(function (a) { return a.manual && a.personas > 0; });
@@ -2318,8 +2347,11 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         '<div class="aviso-ok">' + (pide ? 'La app ha propuesto este reparto según el formulario del grupo' + (f && f.enviadoEl ? ' (' + marcaCorta(f.enviadoEl) + ')' : '') : 'La app ha propuesto este reparto con las personas de la reserva') +
         '. Puede cambiarlo y pulsar «Guardar reparto».</div>';
     }
-    if (!lista.length) proponer();
-    else if (f && f.enviadoEl && segun && f.enviadoEl > segun) aviso = '<div class="aviso-suave">El grupo volvió a enviar su formulario el ' + marcaCorta(f.enviadoEl) + '. Pulse «Volver a proponer» para rehacer el reparto (lo cambiado a mano se mantiene).</div>';
+    if (!lista.length) {
+      if (elecGrupo) cargarPropuesta(); else proponer();
+    } else if (f && f.enviadoEl && segun && f.enviadoEl > segun) {
+      aviso = '<div class="aviso-suave">El grupo volvió a enviar su formulario el ' + marcaCorta(f.enviadoEl) + '. Pulse ' + (elecGrupo ? '«Cargar la propuesta del grupo»' : '«Volver a proponer» para rehacer el reparto (lo cambiado a mano se mantiene)') + '.</div>';
+    }
 
     function resumen() {
       var asig = {}, nh = {};
@@ -2335,9 +2367,10 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       return '<div class="tarjeta rep-res"><div class="rep-grid"><b>' + (pide ? 'Pide el grupo' : 'Personas') + '</b><b class="r">Pax</b><b class="r">Asignado</b>' + filas +
         '<b>Total</b><b class="r">' + tp + '</b><b class="r">' + ta + ' en ' + th + ' hab.</b></div></div>';
     }
-    function filaRep(a, i) {
-      var h = hab(a.habitacion) || { tipo: '', capacidad: 0 };
-      return '<div class="rep-fila" data-i="' + i + '"><div class="rep-nom"><b>Hab. ' + a.habitacion + '</b> <small>' + esc(h.tipo) + ' · ' + h.capacidad + ' plazas</small>' +
+    function filaRep(a, i, oc) {
+      var h = hab(a.habitacion) || { tipo: '', capacidad: 0, estado: 'Cerrada' };
+      var noDisp = h.estado !== 'Disponible' || !!(oc && oc[a.habitacion]);
+      return '<div class="rep-fila" data-i="' + i + '"><div class="rep-nom"><b>' + (noDisp ? '<span class="x-nodisp">✕</span> ' : '') + 'Hab. ' + a.habitacion + '</b> <small>' + esc(h.tipo) + ' · ' + h.capacidad + ' plazas</small>' +
         (a.manual ? ' <span class="tag-man">cambiada a mano</span>' : '') +
         '<select class="entrada rep-uso" aria-label="Uso de la habitación ' + a.habitacion + '">' +
         ['<option value=""' + (!a.uso ? ' selected' : '') + '>Sin indicar</option>'].concat(USOS.map(function (u) { return '<option' + (a.uso === u ? ' selected' : '') + '>' + u + '</option>'; })).join('') +
@@ -2348,12 +2381,15 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     }
     function pinta() {
       lista.sort(function (a, b) { return a.habitacion - b.habitacion; });
+      var ocAct = ocupadasPorOtras(r);
       var tot = lista.reduce(function (t, a) { return t + a.personas; }, 0);
       vista.innerHTML = botonVolver() +
         '<div class="tarjeta"><h2>' + esc(r.grupo) + '</h2><p class="sub" style="margin:-6px 0 0">' + esc(legible(r.entrada)) + ' → ' + esc(legible(r.salida)) + ' · ' + noches(r) + ' noches</p></div>' +
         aviso + resumen() +
-        '<div class="tarjeta"><h2>Habitaciones</h2>' + (lista.length ? lista.map(filaRep).join('') : '<p class="sub">Sin habitaciones.</p>') +
-        '<div class="fila-btns" style="margin-top:10px"><button type="button" class="btn sec" id="rAnadir">+ Añadir habitación</button><button type="button" class="btn sec" id="rProponer">Volver a proponer</button></div>' +
+        '<div class="tarjeta"><h2>Habitaciones</h2>' + (lista.length ? lista.map(function (a, i) { return filaRep(a, i, ocAct); }).join('') : '<p class="sub">Sin habitaciones.</p>') +
+        '<div class="fila-btns" style="margin-top:10px"><button type="button" class="btn sec" id="rAnadir">+ Añadir habitación</button>' +
+        (elecGrupo ? '<button type="button" class="btn sec" id="rPropGrupo">Cargar la propuesta del grupo</button>' : '') +
+        '<button type="button" class="btn sec" id="rProponer">Volver a proponer</button></div>' +
         '<p class="sub" style="margin:10px 0 0;font-size:13px">Lo que cambie a mano queda marcado y no se toca al volver a proponer. Las habitaciones con 0 personas se quitan al guardar.</p></div>' +
         '<div class="form-espacio"></div><div class="pie-form"><div class="total"><b>' + tot + '</b> pernoctan · ' + lista.filter(function (a) { return a.personas; }).length + ' hab.</div>' +
         '<button class="btn" id="rGuardar">Guardar reparto</button></div>';
@@ -2374,6 +2410,12 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
           var h = hab(a.habitacion); a.personas = Math.max(0, Math.min(h.capacidad, a.personas + Number(b.dataset.d))); a.manual = true; cambiado = true; pinta();
         };
       });
+      if ($('#rPropGrupo')) $('#rPropGrupo').onclick = function () {
+        var pedir = lista.length
+          ? confirmar('Se sustituirá el reparto actual por las habitaciones que propuso el grupo en su formulario.', 'Cargar propuesta')
+          : Promise.resolve(true);
+        pedir.then(function (ok) { if (ok) { cargarPropuesta(); pinta(); } });
+      };
       $('#rProponer').onclick = function () {
         var hay = lista.some(function (a) { return a.manual; });
         confirmar('Se rehará el reparto' + (pide ? ' según el formulario del grupo' : '') + '.' + (hay ? ' Las habitaciones cambiadas a mano se mantienen.' : ''), 'Volver a proponer')
@@ -2381,11 +2423,15 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       };
       $('#rAnadir').onclick = function () {
         var oc = ocupadasPorOtras(r), ya = {}; lista.forEach(function (a) { ya[a.habitacion] = 1; });
-        var libres = habitaciones().slice().sort(function (a, b) { return a.numero - b.numero; })
-          .filter(function (h) { return h.estado === 'Disponible' && !oc[h.numero] && !ya[h.numero]; });
+        var candidatas = habitaciones().slice().sort(function (a, b) { return a.numero - b.numero; }).filter(function (h) { return !ya[h.numero]; });
+        var libres = candidatas.filter(function (h) { return h.estado === 'Disponible' && !oc[h.numero]; });
         if (!libres.length) return toast('No quedan habitaciones libres en esas fechas.', true);
-        modal('<p><b>Añadir habitación</b><br><span class="sub">Libres en esas fechas</span></p><div class="rep-libres">' +
-          libres.map(function (h) { return '<button type="button" class="chip" data-n="' + h.numero + '"><b>' + h.numero + '</b> <small>' + esc(h.tipo) + '</small></button>'; }).join('') +
+        modal('<p><b>Añadir habitación</b><br><span class="sub">Libres en esas fechas (con ✕: no disponibles)</span></p><div class="rep-libres">' +
+          candidatas.map(function (h) {
+            var nd = h.estado !== 'Disponible' || !!oc[h.numero];
+            return '<button type="button" class="chip' + (nd ? ' chip-nodisp' : '') + '"' + (nd ? ' disabled' : ' data-n="' + h.numero + '"') + '>' +
+              (nd ? '<span class="x-nodisp">✕</span> ' : '') + '<b>' + h.numero + '</b> <small>' + esc(h.tipo) + '</small></button>';
+          }).join('') +
           '</div><div class="fila-btns" style="margin-top:10px"><button class="btn borde" data-r="0">Volver</button></div>', function (e, cerrar) {
           var b = e.target.closest('[data-n]');
           if (b) { lista.push({ habitacion: +b.dataset.n, personas: 1, uso: 'Otro', manual: true, segun: '' }); cambiado = true; cerrar(); pinta(); return; }
@@ -2499,7 +2545,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       '<div><small>SALIDA</small>' + esc(diaSemana(r.salida)) + ', ' + esc(r.horaSalida) + '</div>' +
       '<div><small>PERNOCTAN</small>' + T.p + ' personas en ' + d.items.length + ' habitaciones · ' + n + ' noches</div>' +
       '<div><small>NIÑOS DE 0 A ' + (cfg('edad.gratis_hasta') || 4) + '</small>' + (bebes ? bebes + ' (no ocupan cama; consultar si necesitan algo)' : 'ninguno') + '</div></div>' +
-      '<h4>Plano</h4>' + plano(r.asignaciones) +
+      '<h4>Plano</h4>' + plano(r.asignaciones, r) +
       '<h4>Preparación por habitación</h4><table class="hd-tabla"><tr><th class="l">Hab.</th><th class="l">Tipo</th><th class="l">Uso</th><th>Pax</th><th>Juegos cama</th><th>Toallas grandes</th><th>Toallas pequeñas</th><th>Papel</th><th>Gel</th></tr>' +
       (filas || '<tr><td class="l" colspan="9">Sin habitaciones asignadas.</td></tr>') +
       '<tr class="hd-total"><td class="l" colspan="3"><b>Total</b></td><td><b>' + T.p + '</b></td><td><b>' + T.cama + '</b></td><td><b>' + T.tg + '</b></td><td><b>' + T.tp + '</b></td><td><b>' + T.rollos + '</b></td><td><b>' + T.gel + '</b></td></tr></table>' +
@@ -2846,7 +2892,24 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     });
   };
   $('#btnRecargar').onclick = function () { recargar(); };
-  window.addEventListener('hashchange', pintar);
+  window.addEventListener('hashchange', function () {
+    if (!S.inactiva && typeof S.hayCambios === 'function' && S.hayCambios() && location.hash !== ultimoHash) {
+      var volverA = ultimoHash || '#/';
+      salirSiSinCambios(function () {
+        var limpiar = S.alDescartar; S.alDescartar = null;
+        if (limpiar) limpiar();
+        historial++;
+        ultimoHash = location.hash;
+        pintar();
+      }, function () {
+        history.pushState(null, '', volverA);
+      });
+      return;
+    }
+    historial++;
+    ultimoHash = location.hash;
+    pintar();
+  });
   // Al volver a la app (si han pasado más de 2 minutos): comprobar con el reloj y luego mostrar.
   // Si se está escribiendo en un formulario, no se toca nada.
   document.addEventListener('visibilitychange', function () {

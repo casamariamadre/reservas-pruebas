@@ -11,7 +11,9 @@
   function hora(sv, def) { var v = aj('hora.' + sv.toLowerCase()).trim(); if (/^\d:\d{2}$/.test(v)) v = '0' + v; return /^\d{2}:\d{2}$/.test(v) ? v : def; }
   function comidas() { return [['Desayuno', hora('Desayuno', '09:00')], ['Comida', hora('Comida', '14:00')], ['Cena', hora('Cena', '21:00')]]; }
   var DSEM = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
-  var INFO = null, F = null, paso = 1;
+  var PLANO_SUP = [11, 12, 'ESCALERAS', 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+  var PLANO_INF = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 'ESC. / ASC.', 25, 24, 23];
+  var INFO = null, F = null, paso = 1, habSel = null;
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function aFecha(t) { var p = t.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
@@ -62,6 +64,7 @@
       F.habitaciones = Object.assign({ matrimonios: 0, comparten: 0, individual: 0, literas: 0, movilidad: 0, observaciones: '' }, F.habitaciones || {});
       if (F.habitaciones.movilidad) { F.habitaciones.comparten += F.habitaciones.movilidad; F.habitaciones.movilidad = 0; }
       F.consentimientos = F.consentimientos || { datos: false, imagenes: false, autorizacion: false };
+      iniciarEleccion(e);
       usarGuardado();  // 2.5.4: si ya se aplicó, manda lo guardado después (comidas quitadas, cambios del gestor)
       return; }
     F = {
@@ -69,12 +72,39 @@
       grupo: { entidad: g.entidad || '', cif: g.cif || '', direccion: g.direccion || '', representante: g.representante || '', dni: g.dni || '', cargo: g.cargo || '' },
       personas: { adultos: r.personas || 0, ninos: 0, bebes: 0 },
       servMap: {}, salaSet: {},
-      habitaciones: { matrimonios: 0, comparten: 0, individual: 0, literas: 0, movilidad: 0, observaciones: '' },
+      habitaciones: { matrimonios: 0, comparten: 0, individual: 0, literas: 0, movilidad: 0, observaciones: '', eleccion: [] },
+      eleccionMap: {},
       hayAlergias: null, alergias: [],
       consentimientos: { datos: false, imagenes: false, autorizacion: false }
     };
+    iniciarEleccion(null);
     (r.servicios || []).forEach(function (x) { if (INFO.salas.indexOf(x.servicio) >= 0) F.salaSet[x.fecha + '|' + x.servicio] = true; });
     if (!usarGuardado()) rellenarServicios();
+  }
+  function tienePlano() { return !!(aloj() && INFO && INFO.plano && Array.isArray(INFO.plano.habitaciones) && INFO.plano.habitaciones.length); }
+  function habPlano(n) {
+    if (!tienePlano()) return null;
+    for (var i = 0; i < INFO.plano.habitaciones.length; i++) if (INFO.plano.habitaciones[i].numero === n) return INFO.plano.habitaciones[i];
+    return null;
+  }
+  function iniciarEleccion(enviado) {
+    F.eleccionMap = {};
+    if (!tienePlano()) { F.habitaciones.eleccion = []; return; }
+    var base = (enviado && enviado.habitaciones && Array.isArray(enviado.habitaciones.eleccion) && enviado.habitaciones.eleccion.length)
+      ? enviado.habitaciones.eleccion
+      : ((INFO.plano.asignadas && INFO.plano.asignadas.length) ? INFO.plano.asignadas : []);
+    base.forEach(function (a) {
+      var n = Math.floor(Number(a && a.habitacion) || 0), p = Math.floor(Number(a && a.personas) || 0), hp = habPlano(n);
+      if (hp && !hp.cerrada && !hp.ocupada && p >= 1) F.eleccionMap[n] = Math.min(hp.capacidad, p);
+    });
+    F.habitaciones.eleccion = listaEleccion();
+  }
+  function listaEleccion() {
+    if (!tienePlano() || !F || !F.eleccionMap) return [];
+    return Object.keys(F.eleccionMap).map(Number).filter(function (n) {
+      var hp = habPlano(n);
+      return hp && !hp.cerrada && !hp.ocupada && F.eleccionMap[n] >= 1;
+    }).sort(function (a, b) { return a - b; }).map(function (n) { return { habitacion: n, personas: F.eleccionMap[n] }; });
   }
   /** 2.5.4: manda lo último que se actualizó. Si la reserva ya tiene comidas guardadas (y no hay un formulario enviado
       sin aplicar), la tabla sale con ellas: una comida quitada sale a 0 y no se vuelve a llenar. */
@@ -99,9 +129,11 @@
   }
 
   // ---------------- Pintar ----------------
+  function textoMatrimonios(v) { return v ? v + ' <small class="stp-pax">(' + (v * 2) + ' pax)</small>' : '0'; }
   function stepper(id, valor, titulo, ayuda) {
+    var outHtml = id === 'matrimonios' ? textoMatrimonios(valor) : valor;
     return '<div class="paso-fila"><div><div class="t">' + titulo + '</div>' + (ayuda ? '<div class="hint">' + ayuda + '</div>' : '') + '</div>' +
-      '<div class="stp"><button type="button" data-st="' + id + '" data-d="-1" aria-label="Quitar uno: ' + esc(titulo) + '">−</button><output id="o_' + id + '">' + valor + '</output>' +
+      '<div class="stp"><button type="button" data-st="' + id + '" data-d="-1" aria-label="Quitar uno: ' + esc(titulo) + '">−</button><output id="o_' + id + '">' + outHtml + '</output>' +
       '<button type="button" data-st="' + id + '" data-d="1" aria-label="Añadir uno: ' + esc(titulo) + '">+</button></div></div>';
   }
   function campo(id, etiqueta, valor, tipo, ro, ob) {
@@ -186,6 +218,51 @@
       '<label class="f" for="ot' + i + '">Otras alergias o intolerancias de la persona ' + letra(i) + '</label><input id="ot' + i + '" type="text" data-otras="' + i + '" value="' + esc(a.otras || '') + '" placeholder="Por ejemplo: miel, kiwi…"></div>';
   }
 
+  function descCamasHab(hp) {
+    if (hp.camas) return hp.camas;
+    if (hp.capacidad === 4) return '2 literas';
+    if (hp.capacidad === 5) return '2 literas + 1 cama';
+    return hp.capacidad + (hp.capacidad === 1 ? ' cama' : ' camas');
+  }
+  function htmlPlanoGrupo() {
+    if (!tienePlano()) return '';
+    function celda(x) {
+      if (typeof x === 'string') {
+        var et = x === 'ESCALERAS' ? 'ESCAL.' : 'ESC.';
+        return '<div class="fp-hab fp-esc"' + (x === 'ESCALERAS' ? ' style="grid-column:span 2"' : '') + ' title="' + esc(x) + '">' + et + '</div>';
+      }
+      var hp = habPlano(x);
+      if (!hp) return '<div class="fp-hab"></div>';
+      if (hp.cerrada || hp.ocupada) {
+        return '<button type="button" class="fp-hab fp-nodisp" disabled aria-label="Habitación ' + x + ' no disponible"><b>' + x + '</b><span>—</span><i class="fp-x" aria-hidden="true">✕</i></button>';
+      }
+      var p = (F.eleccionMap && F.eleccionMap[x]) || 0;
+      var cls = 'fp-hab' + (p > 0 ? ' fp-elegida' : '') + (habSel === x ? ' fp-sel' : '');
+      return '<button type="button" class="' + cls + '" data-fhab="' + x + '" aria-label="Habitación ' + x + ', ' + p + ' de ' + hp.capacidad + ' plazas"><b>' + x + '</b><span>' + p + '/' + hp.capacidad + '</span></button>';
+    }
+    var selHtml = '';
+    var hpSel = habSel ? habPlano(habSel) : null;
+    if (hpSel && !hpSel.cerrada && !hpSel.ocupada) {
+      var pAct = (F.eleccionMap && F.eleccionMap[hpSel.numero]) || 0, btns = [];
+      for (var i = 0; i <= hpSel.capacidad; i++) {
+        btns.push('<button type="button" class="fp-num' + (pAct === i ? ' on' : '') + '" data-fpax="' + i + '">' + i + '</button>');
+      }
+      selHtml = '<div class="fp-selector"><div class="fp-sel-tit">Habitación ' + hpSel.numero + ' · ' + esc(descCamasHab(hpSel)) + ' · ¿cuántos?</div><div class="fp-sel-btns">' + btns.join('') + '</div></div>';
+    }
+    var elec = listaEleccion(), colocadas = elec.reduce(function (s, a) { return s + a.personas; }, 0), nHab = elec.length, t = personasCama();
+    var recHtml = colocadas === t && (t > 0 || nHab > 0)
+      ? '<div class="ok-box fp-rec">✓ ' + colocadas + ' de ' + t + ' personas colocadas en ' + nHab + ' hab.</div>'
+      : colocadas > t
+        ? '<div class="err-box fp-rec">' + colocadas + ' de ' + t + ' personas colocadas · sobran ' + (colocadas - t) + '</div>'
+        : '<div class="gris-box fp-rec">' + colocadas + ' de ' + t + ' personas colocadas en ' + nHab + ' hab.' + (t > colocadas ? ' · faltan ' + (t - colocadas) : '') + '</div>';
+    return '<div class="card plano-card" id="cardPlano">' +
+      '<div class="card-tit pri">Elijan sus habitaciones (opcional)</div>' +
+      '<div class="hint" style="margin-bottom:8px">Toquen una habitación e indiquen cuántos dormirán en ella. Con ✕: no disponibles.</div>' +
+      '<div class="fp-plano"><div class="fp-fila">' + PLANO_SUP.map(celda).join('') + '</div>' +
+      '<div class="fp-pasillo">PASILLO</div><div class="fp-fila">' + PLANO_INF.map(celda).join('') + '</div></div>' +
+      selHtml + recHtml +
+      '<div class="hint" style="margin-top:6px">Es una propuesta: la Casa la revisa y confirma. Si no eligen, la Casa reparte.</div></div>';
+  }
   function paso3() {
     if (!aloj()) return '<div><h2>Habitaciones</h2></div><div class="card"><p class="hint" style="margin:0">Esta reserva es sin alojamiento: no hace falta indicar habitaciones. Pulse «Siguiente».</p></div>';
     var h = F.habitaciones;
@@ -195,15 +272,19 @@
       stepper('individual', h.individual, 'Personas en habitación individual', 'Según disponibilidad') +
       stepper('literas', h.literas, 'Jóvenes en literas', 'Habitaciones de 4') + '</div>' +
       '<div id="reparto">' + htmlReparto() + '</div>' +
+      '<div id="bloquePlano">' + htmlPlanoGrupo() + '</div>' +
       '<div class="card"><label class="f" for="hObs" style="margin-top:0">Observaciones (opcional)</label>' +
       (F.personas.bebes ? '<div class="hint" style="margin-bottom:6px">' + AVISO_BEBES + '</div>' : '') +
       '<textarea id="hObs" maxlength="300">' + esc(h.observaciones || '') + '</textarea></div>';
   }
   function htmlReparto() {
     var h = F.habitaciones, n = h.matrimonios * 2 + h.comparten + h.individual + h.literas, t = personasCama();
-    return (n === t ? '<div class="ok-box">✓ ' + n + ' de ' + t + ' personas repartidas</div>' :
-      '<div class="av-box">' + n + ' de ' + t + ' personas repartidas' + (n > t ? ' (sobran ' + (n - t) + ')' : ' (faltan ' + (t - n) + ')') + '. Puede enviarlo igualmente; la Casa lo revisará.</div>') +
-      (F.personas.bebes ? '<div class="hint" style="margin-top:6px">Los niños de 0 a ' + (aj('edad.gratis_hasta') || 4) + ' años no se cuentan aquí.</div>' : '');
+    var caja = n === t
+      ? '<div class="ok-box">✓ ' + n + ' de ' + t + ' personas repartidas</div>'
+      : n > t
+        ? '<div class="err-box">' + n + ' de ' + t + ' personas · sobran ' + (n - t) + '. Revisen los números.</div>'
+        : '<div class="av-box">' + n + ' de ' + t + ' personas · faltan ' + (t - n) + '.</div>';
+    return caja + (F.personas.bebes ? '<div class="hint" style="margin-top:6px">Los niños de 0 a ' + (aj('edad.gratis_hasta') || 4) + ' años no se cuentan aquí.</div>' : '');
   }
 
   function calculo() {
@@ -244,7 +325,7 @@
     if (t.Noche) serv.push((t.Noche.a + t.Noche.n + t.Noche.b) + ' pernoctaciones');
     ['Desayuno', 'Comida', 'Cena'].forEach(function (k) { if (t[k]) serv.push((t[k].a + t[k].n + t[k].b) + ' ' + k.toLowerCase() + 's'); });
     var salas = {}; Object.keys(F.salaSet).forEach(function (k) { if (!F.salaSet[k]) return; var x = k.split('|'); (salas[x[1]] = salas[x[1]] || []).push(corto(x[0])); });
-    var h = F.habitaciones, hab = [];
+    var h = F.habitaciones, hab = [], elec = listaEleccion();
     if (h.matrimonios) hab.push(h.matrimonios + ' matrimonios'); if (h.comparten) hab.push(h.comparten + ' comparten'); if (h.individual) hab.push(h.individual + ' individuales');
     if (h.literas) hab.push(h.literas + ' en literas');
     var al = F.hayAlergias ? F.alergias.filter(function (a) { return a.alergenos.length || a.otras; }) : [];
@@ -260,7 +341,8 @@
       '<b>Personas:</b> ' + p.adultos + ' adultos' + (p.ninos ? ' · ' + p.ninos + ' niños' : '') + (p.bebes ? ' · ' + p.bebes + ' de 0 a ' + (aj('edad.gratis_hasta') || 4) + ' años' : '') + '<br>' +
       '<b>Servicios:</b> ' + (serv.join(' · ') || '—') + '<br>' +
       '<b>Salas:</b> ' + (Object.keys(salas).map(function (k) { return k.toLowerCase() + ' (' + salas[k].join(', ') + ')'; }).join(', ') || '—') + '<br>' +
-      (aloj() ? '<b>Habitaciones:</b> ' + (hab.join(', ') || '—') + '<br>' : '') +
+      (aloj() ? '<b>Habitaciones:</b> ' + (hab.join(', ') || '—') + '<br>' +
+        (elec.length ? '<b>Habitaciones elegidas:</b> ' + elec.map(function (a) { return a.habitacion + ' (' + a.personas + ')'; }).join(', ') + '<br>' : '') : '') +
       '<b>Alergias:</b> ' + (al.length ? al.map(function (a, i) { return letra(i) + ': ' + a.alergenos.concat(a.otras ? [a.otras] : []).join(', '); }).join(' · ') : 'ninguna') + '<br>' +
       '</div>' + htmlPresupuesto() +
       // 2.1.0: sin casillas; solo la información básica de protección de datos y un enlace a la completa
@@ -283,10 +365,37 @@
       $$('[data-sala]').forEach(function (e) { F.salaSet[e.dataset.sala] = e.checked; });
       $$('[data-otras]').forEach(function (e) { F.alergias[+e.dataset.otras].otras = e.value.trim(); });
     }
-    if (paso === 3 && $('#hObs')) F.habitaciones.observaciones = $('#hObs').value.trim();
+    if (paso === 3) {
+      if ($('#hObs')) F.habitaciones.observaciones = $('#hObs').value.trim();
+      F.habitaciones.eleccion = listaEleccion();
+    }
+  }
+
+  function enlazarPlano() {
+    var bp = $('#bloquePlano');
+    if (!bp) return;
+    bp.onclick = function (e) {
+      var bh = e.target.closest('[data-fhab]');
+      if (bh) {
+        habSel = +bh.dataset.fhab;
+        bp.innerHTML = htmlPlanoGrupo();
+        return;
+      }
+      var bpax = e.target.closest('[data-fpax]');
+      if (bpax && habSel) {
+        var n = +bpax.dataset.fpax, hp = habPlano(habSel);
+        if (hp && !hp.cerrada && !hp.ocupada) {
+          if (n <= 0) delete F.eleccionMap[habSel];
+          else F.eleccionMap[habSel] = Math.min(hp.capacidad, n);
+          F.habitaciones.eleccion = listaEleccion();
+          bp.innerHTML = htmlPlanoGrupo();
+        }
+      }
+    };
   }
 
   function enlazar() {
+    enlazarPlano();
     ['cResp', 'cTel', 'cEmail'].forEach(function (id) {
       var el = $('#' + id), av = $('#av_' + id);
       if (el && av) el.oninput = function () { av.hidden = !!el.value.trim(); };
@@ -308,7 +417,8 @@
           return pintar();
         }
         F.habitaciones[k] = num(F.habitaciones[k] + d);
-        $('#o_' + k).textContent = F.habitaciones[k];
+        if (k === 'matrimonios') $('#o_' + k).innerHTML = textoMatrimonios(F.habitaciones[k]);
+        else $('#o_' + k).textContent = F.habitaciones[k];
         $('#reparto').innerHTML = htmlReparto();
       };
     });
@@ -336,6 +446,7 @@
     var pos = serviciosPosibles(), servicios = [], salas = [];
     Object.keys(F.servMap).forEach(function (k) { if (!pos[k]) return; var x = k.split('|'); if (F.servMap[k]) servicios.push({ fecha: x[0], servicio: x[1], total: F.servMap[k] }); });
     Object.keys(F.salaSet).forEach(function (k) { if (F.salaSet[k]) { var x = k.split('|'); salas.push({ fecha: x[0], sala: x[1] }); } });
+    if (aloj()) F.habitaciones.eleccion = listaEleccion();
     var datos = { contacto: F.contacto, grupo: F.grupo, personas: F.personas, servicios: servicios, salas: salas,
       habitaciones: aloj() ? F.habitaciones : {}, alergias: F.hayAlergias ? F.alergias : [], consentimientos: cs };
     var b = $('#bSig'); b.disabled = true; b.textContent = 'Enviando…';
