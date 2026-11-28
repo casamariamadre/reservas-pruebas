@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '2.5.4';
+  var VERSION = '2.5.5';
   var VERSION_FECHA = '28/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -1160,7 +1160,11 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       };
     }
     if ($('#dCancelar')) $('#dCancelar').onclick = accion('cancelarReserva', '¿Cancelar la reserva de <b>' + esc(r.grupo) + '</b>? Se quitará del calendario y quedará marcada como cancelada en la lista de reservas.', 'Sí, cancelar', 'Reserva cancelada', function () {
-      preguntarFianzaAlCancelar(r, function () { reemplazar('reserva/' + encodeURIComponent(r.id)); });
+      preguntarFianzaAlCancelar(r, function () {
+        var irFicha = function () { reemplazar('reserva/' + encodeURIComponent(r.id)); };
+        if (tipo(r) === 'Bloqueo') return irFicha();
+        mensajeGrupo(reserva(r.id) || r, 'cancelacion', '', irFicha);  // 2.5.5: avisar al grupo
+      });
     });
     if ($('#dBorrar')) $('#dBorrar').onclick = accion('borrarReserva', '¿<b>Borrar</b> definitivamente «' + esc(r.grupo) + '»? Desaparecerá de la app, de la lista de reservas y del calendario. <b>No se puede deshacer.</b>', 'Sí, borrar', 'Reserva borrada', function () {
       S.origenFicha = 'reservas';
@@ -1679,10 +1683,12 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var sufOrigen = (q.desde ? '&desde=' + encodeURIComponent(q.desde) : '') + (q.ap ? '&ap=' + encodeURIComponent(q.ap) : '');
     vista.innerHTML = botonVolver() +
       '<div class="hoja-barra"><div class="segmento" id="hModo"><button type="button" data-m="presupuesto"' + (modo === 'presupuesto' ? ' class="activo"' : '') + '>Presupuesto</button><button type="button" data-m="liquidacion"' + (modo === 'liquidacion' ? ' class="activo"' : '') + '>Liquidación</button></div>' +
-      '<div class="fila-btns"><button class="btn sec" id="hServ">Corregir servicios</button><button class="btn sec" id="hXls">Descargar Excel</button><button class="btn" id="hPdf">Imprimir / PDF</button></div></div>' +
+      '<div class="fila-btns"><button class="btn sec" id="hServ">Corregir servicios</button><button class="btn sec" id="hXls">Descargar Excel</button><button class="btn" id="hPdf">Imprimir / PDF</button>' +
+        (modo === 'liquidacion' ? '<button class="btn" id="hEnviar">Enviar al grupo</button>' : '') + '</div></div>' +
       '<div class="hoja-marco">' + htmlHoja(r, modo) + '</div>';
     enlazarVolver(null, dest, true);
     $('#hModo').onclick = function (e) { var b = e.target.closest('button'); if (b) reemplazar('hoja/' + encodeURIComponent(r.id) + '?modo=' + b.dataset.m + sufOrigen); };
+    if ($('#hEnviar')) $('#hEnviar').onclick = function () { mensajeGrupo(r, 'liquidacion', ''); };  // 2.5.5
     $('#hServ').onclick = function () { ir('servicios/' + encodeURIComponent(r.id) + '?desde=hoja&modo=' + modo + (q.ap ? '&ap=' + encodeURIComponent(q.ap) : '')); };
     $('#hXls').onclick = function () {
       cargando(true);
@@ -1896,55 +1902,77 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       });
     };
   }
-  function compartirEnlace(r, enlace, cual) {
-    var contrato = cual === 'contrato', recordar = cual === 'recordar_senal', presupAct = cual === 'presupuesto_actualizado';
-    // Cada forma de envío queda en la bitácora (sin esperar ni mostrar el reloj).
+  // ---------------- 2.5.5 · Mensajes ya redactados (D14, D19) ----------------
+  // La app pone el mensaje que toca según el paso (sin elegir) con los textos de Administración › Mensajes al grupo.
+  var MENSAJES = {
+    condiciones: { tit: 'enviar el presupuesto y las condiciones', asunto: 'Presupuesto y condiciones', log: 'contrato_enviado' },
+    formulario: { tit: 'enviar el formulario', asunto: 'Formulario', log: null },
+    recordar_fianza: { tit: 'recordar la fianza', asunto: 'Recordatorio de la fianza', log: 'senal_recordada' },
+    presupuesto_actualizado: { tit: 'presupuesto actualizado', asunto: 'Presupuesto actualizado', log: 'presupuesto_actualizado' },
+    liquidacion: { tit: 'enviar la liquidación', asunto: 'Liquidación', log: 'liquidacion_enviada', nota: 'Adjunta el PDF de la liquidación (botón «Imprimir / PDF») en el WhatsApp o en el correo.' },
+    cancelacion: { tit: 'avisar de la cancelación', asunto: 'Cancelación de la reserva', log: 'cancelacion_avisada' }
+  };
+  var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  function fechasTexto(r) {
+    function p(t) { var x = String(t).split('-'); return { d: +x[2], m: +x[1] - 1, a: x[0] }; }
+    var a = p(r.entrada), b = p(r.salida);
+    if (r.entrada === r.salida) return a.d + ' de ' + MESES[a.m] + ' de ' + a.a;
+    if (a.a === b.a && a.m === b.m) return a.d + ' al ' + b.d + ' de ' + MESES[b.m] + ' de ' + b.a;
+    return a.d + ' de ' + MESES[a.m] + (a.a !== b.a ? ' de ' + a.a : '') + ' al ' + b.d + ' de ' + MESES[b.m] + ' de ' + b.a;
+  }
+  function textoMensaje(r, cual, enlace) {
+    var t = cfg('mensaje.' + cual) || '';
+    var resp = String(r.responsable || '').trim();
+    if (!resp) t = t.replace(/,\s*\{responsable\}/g, '');
+    var v = { responsable: resp, grupo: r.grupo || '', fechas: fechasTexto(r), enlace: enlace || '',
+      fianza: euros(cfgNum('contrato.senal') != null ? cfgNum('contrato.senal') : 200), iban: cfg('casa.iban'),
+      dias_pago: cfg('pago.dias_despues') || '5', telefono_casa: cfg('casa.telefono') };
+    t = t.replace(/\{([a-z_]+)\}/g, function (m, k) { return Object.prototype.hasOwnProperty.call(v, k) ? v[k] : m; });
+    if (enlace && t.indexOf(enlace) < 0) t += '\n\n' + enlace;  // por si el texto de Administración no lleva {enlace}
+    return t;
+  }
+  function telWhatsApp(tel) {
+    var d = String(tel || '').replace(/[^\d+]/g, '');
+    if (!d) return '';
+    if (d.indexOf('+') === 0) return d.slice(1);
+    if (d.indexOf('00') === 0) return d.slice(2);
+    return d.length === 9 ? '34' + d : d;
+  }
+  /** Pantalla «Enviar al grupo»: el mensaje que toca, editable, y WhatsApp / Correo / Copiar. */
+  function mensajeGrupo(r, cual, enlace, alCerrar) {
+    var M = MENSAJES[cual] || MENSAJES.formulario;
     var apuntado = {};
     function apuntar(t) {
-      if (contrato) t = 'contrato_enviado';
-      else if (recordar) t = 'senal_recordada';
-      else if (presupAct) t = 'presupuesto_actualizado';
-      if (apuntado[t] || S.sinConexion) return; apuntado[t] = 1; usarDB(function () { return DB.anotar(r.id, t); }).catch(function () {});
+      t = M.log || t;
+      if (!t || apuntado[t] || S.sinConexion) return; apuntado[t] = 1; usarDB(function () { return DB.anotar(r.id, t); }).catch(function () {});
     }
-    var fechas = legible(r.entrada) + ' a ' + legible(r.salida);
-    var impSenal = euros(cfgNum('contrato.senal') != null ? cfgNum('contrato.senal') : 200);
-    var resp = r.responsable ? ', ' + r.responsable : '';
-    var texto = contrato
-      ? 'Hola. Os enviamos el presupuesto y las condiciones de vuestra estancia en la Casa de Espiritualidad María Madre (' + fechas + '). Podéis revisarlos y aceptarlos desde el móvil en este enlace:'
-      : recordar
-      ? 'Hola' + resp + '. Le recordamos la fianza de ' + impSenal + ' para su reserva del ' + fechas + ' en la Casa María Madre. Puede adjuntar el comprobante en este enlace:'
-      : presupAct
-      ? 'Hola. Le enviamos el presupuesto actualizado de su reserva del ' + fechas + ' en la Casa de Espiritualidad María Madre. Puede consultarlo en el mismo enlace:'
-      : 'Hola. Para preparar vuestra estancia en la Casa de Espiritualidad María Madre (' + fechas +
-      '), por favor rellenad este formulario. Podéis corregirlo con el mismo enlace hasta el día de entrada:';
-    var titModal = contrato ? 'Enlace del presupuesto y las condiciones'
-      : recordar ? 'Recordar la fianza'
-      : presupAct ? 'Enlace del presupuesto actualizado'
-      : 'Enlace del formulario';
-    var asunto = (contrato ? 'Presupuesto y condiciones'
-      : recordar ? 'Recordatorio de la fianza'
-      : presupAct ? 'Presupuesto actualizado'
-      : 'Formulario') + ' de su estancia · Casa María Madre';
-    if (presupAct) apuntar('presupuesto_actualizado');
-    modal('<p style="margin-bottom:6px"><b>' + titModal + '</b></p><p class="sub" style="margin:0 0 10px">Envíalo al responsable del grupo. Solo sirve para esta reserva.</p>' +
-      '<input class="entrada" id="feEnlace" readonly value="' + esc(enlace) + '" style="font-size:14px">' +
-      '<div class="fila-btns" style="margin-top:10px">' + (navigator.share ? '<button class="btn" data-r="share">Compartir…</button>' : '') +
-      '<button class="btn sec" data-r="copiar">Copiar</button></div>' +
-      '<div class="fila-btns" style="margin-top:8px"><a class="btn sec" data-log="enlace_whatsapp" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(texto + ' ' + enlace) + '">WhatsApp</a>' +
-      '<a class="btn sec" data-log="enlace_correo" href="mailto:' + esc(r.email || '') + '?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(texto + '\n\n' + enlace) + '">Correo</a></div>' +
-      '<div class="fila-btns" style="margin-top:8px"><button class="btn borde" data-r="0">Cerrar</button></div>',
+    var asunto = M.asunto + ' · Casa María Madre · ' + (r.grupo || '');
+    if (cual === 'presupuesto_actualizado') apuntar();
+    modal('<div style="font-size:14px;color:#6F6560;margin-bottom:6px">Enviar al grupo · <b>' + esc(r.grupo || '') + '</b></div>' +
+      '<div style="background:#F6E9E4;color:#85200C;border-radius:12px;padding:10px 14px;font-weight:700">Mensaje: ' + esc(M.tit) + '</div>' +
+      (M.nota ? '<p class="sub" style="margin:6px 0 0"><b>' + esc(M.nota) + '</b></p>' : '') +
+      '<label class="sub" for="msjTxt" style="display:block;margin:8px 0 4px">Texto (puedes cambiarlo antes de enviar)</label>' +
+      '<textarea class="entrada" id="msjTxt" style="min-height:240px;line-height:1.45;font-family:inherit">' + esc(textoMensaje(r, cual, enlace)) + '</textarea>' +
+      '<p class="sub" style="margin:6px 0 0;font-size:13px">Los textos base se cambian en Ajustes › Administración › Mensajes al grupo.</p>' +
+      '<div class="fila-btns" style="margin-top:10px"><button class="btn" data-r="wa" style="background:#2E7D4F;border-color:#2E7D4F">WhatsApp</button><button class="btn" data-r="mail">Correo</button><button class="btn sec" data-r="copiar">Copiar</button></div>' +
+      '<div class="fila-btns" style="margin-top:8px"><button class="btn borde" data-r="0">‹ Volver</button></div>',
       function (e, cerrar) {
-        var lg = e.target.closest('[data-log]'); if (lg) apuntar(lg.dataset.log);
         var b = e.target.closest('[data-r]'); if (!b) return;
-        if (b.dataset.r === '0') { cerrar(); pintar(); return; }
-        if (b.dataset.r === 'share') { navigator.share({ title: asunto, text: texto, url: enlace }).then(function () { apuntar('enlace_compartido'); }).catch(function () {}); return; }
+        var txt = $('#msjTxt').value;
+        if (b.dataset.r === '0') { cerrar(); if (alCerrar) alCerrar(); else pintar(); return; }
+        if (b.dataset.r === 'wa') { apuntar('enlace_whatsapp'); window.open('https://wa.me/' + telWhatsApp(r.telefono) + '?text=' + encodeURIComponent(txt), '_blank', 'noopener'); return; }
+        if (b.dataset.r === 'mail') { apuntar('enlace_correo'); location.href = 'mailto:' + encodeURIComponent(r.email || '').replace(/%40/g, '@') + '?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(txt); return; }
         if (b.dataset.r === 'copiar') {
-          var i = $('#feEnlace'); i.select(); i.setSelectionRange(0, 9999);
           apuntar('enlace_copiado');
-          (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(enlace) : Promise.reject()).then(function () { toast('Enlace copiado'); })
-            .catch(function () { try { document.execCommand('copy'); toast('Enlace copiado'); } catch (x) { toast('Mantén pulsado el enlace para copiarlo.', true); } });
+          var i = $('#msjTxt');
+          (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { toast('Mensaje copiado'); })
+            .catch(function () { try { i.select(); document.execCommand('copy'); toast('Mensaje copiado'); } catch (x) { toast('Mantén pulsado el texto para copiarlo.', true); } });
         }
       });
+  }
+  /** Antes de la 2.5.5 cada envío tenía su ventana; ahora todos usan el mensaje ya redactado. */
+  function compartirEnlace(r, enlace, cual) {
+    mensajeGrupo(r, cual === 'contrato' ? 'condiciones' : cual === 'recordar_senal' ? 'recordar_fianza' : cual === 'presupuesto_actualizado' ? 'presupuesto_actualizado' : 'formulario', enlace);
   }
 
   function pintarFormularioRecibido(id) {
