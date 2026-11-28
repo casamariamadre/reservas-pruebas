@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '2.5.5';
+  var VERSION = '2.5.6';
   var VERSION_FECHA = '28/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -46,6 +46,24 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
   var MESES_L = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
   function nombreMes(d) { var t = d.toLocaleDateString('es-ES', { month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1) + ' ' + d.getFullYear(); }
   function diaSemana(s) { return aFecha(s).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }); }
+  function fechaLargaDia(s) { return s ? aFecha(s).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '—'; }
+  function imprimirDoc(cls, titulo) {
+    var ant = document.title;
+    document.body.classList.remove('imprimiendo', 'imprimiendo-hoja');
+    if (titulo) document.title = titulo;
+    document.body.classList.add(cls);
+    var limpio = false;
+    function limpiar() {
+      if (limpio) return;
+      limpio = true;
+      document.body.classList.remove(cls);
+      if (titulo) document.title = ant;
+      window.removeEventListener('afterprint', limpiar);
+    }
+    window.addEventListener('afterprint', limpiar);
+    window.print();
+    setTimeout(limpiar, 60000);
+  }
   function formatoTel(t) {
     var s = String(t || '').trim(); if (!s) return '';
     var pref = '', dig = s.replace(/[^\d+]/g, '');
@@ -442,7 +460,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if ($('#rDesde')) $('#rDesde').onchange = function () { S.relDesde = this.value; pintarReservas(); };
     if ($('#rHasta')) $('#rHasta').onchange = function () { S.relHasta = this.value; pintarReservas(); };
     if ($('#fTodos')) $('#fTodos').onchange = function () { S.findesTodos = this.checked; pintarReservas(); };
-    if ($('#rPdf')) $('#rPdf').onclick = function () { document.body.classList.add('imprimiendo'); window.print(); setTimeout(function () { document.body.classList.remove('imprimiendo'); }, 500); };
+    if ($('#rPdf')) $('#rPdf').onclick = function () { imprimirDoc('imprimiendo', 'Reservas · Casa María Madre'); };
     if ($('#rCopiar')) $('#rCopiar').onclick = pedirCopia;
     $$('.findes [data-f]').forEach(function (b) { b.onclick = function () { ir('nueva?fecha=' + b.dataset.f + '&salida=' + b.dataset.s); }; });
     $$('.rel-item[data-id]').forEach(function (b) { b.onclick = function () { ir('reserva/' + encodeURIComponent(b.dataset.id)); }; });
@@ -489,6 +507,72 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     return { dias: rangoDias(r), titulo: esc(r.grupo), negrita: tipo(r) === 'Bloqueo', estado: estado, tipo: tipoTxt,
              detalle: partes.join(' · '), obs: r.observaciones ? esc(r.observaciones) : '', cancelada: r.estado === 'Cancelada', id: r.id };
   }
+  function htmlRelacionPdf(grupos) {
+    var activos = (grupos || []).map(function (g) {
+      return { k: g.k, mes: g.mes, anio: g.anio, items: g.items.filter(function (r) { return r.estado !== 'Cancelada'; }) };
+    }).filter(function (g) { return g.items.length > 0; });
+    var cuerpo = activos.map(function (g) {
+      var numMes = +g.k.slice(5, 7);
+      var fichas = g.items.map(function (r) {
+        if (tipo(r) === 'Bloqueo') {
+          return '<div class="rp-ficha rp-bloq"><div class="rp-bloq-linea"><b>' + esc(rangoDias(r)) + ' · ' + esc((r.grupo || 'DESCANSO').toUpperCase()) + '</b><span>Bloqueo</span></div></div>';
+        }
+        var aloj = tipo(r) === 'Alojamiento', prov = r.estado === 'Provisional';
+        var estTxt = prov ? 'Provisional' : 'Confirmada';
+        var fzTxt = r.pagaFianza === 'No' ? 'sin fianza' : (senalPagada(r).pagada ? 'con fianza pagada' : 'con fianza');
+        var txtP = textoPersonas(r);
+        var sinNum = !(Number(r.personas) > 0) && /^0\b/.test(txtP);
+        var persHtml = sinNum ? '<b class="rp-rojo">0 (falta el número)</b>' : esc(txtP);
+        var nHabs = (r.asignaciones || []).length;
+        var habsHtml = !aloj ? '—' : (nHabs ? (nHabs + ' hab. · ' + pernoctan(r) + ' pernoctan') : '<span class="rp-ocre">sin reparto</span>');
+        var fDat = r.formulario && r.formulario.datos;
+        var aler = (r.alergias && r.alergias.length) ? r.alergias : ((fDat && fDat.alergias) || []);
+        var alerHtml = aler.length ? (aler.length + (aler.length === 1 ? ' persona' : ' personas')) : '—';
+        var respHtml = String(r.responsable || '').trim() ? esc(r.responsable) : '<span class="rp-ocre">falta</span>';
+        var telHtml = String(r.telefono || '').trim() ? esc(r.telefono) : '<span class="rp-ocre">falta</span>';
+        var mailHtml = String(r.email || '').trim() ? esc(r.email) : '<span class="rp-ocre">falta</span>';
+
+        var sv = r.servicios || [], totSv = { Desayuno: 0, Comida: 0, Cena: 0 }, salasMap = {};
+        sv.forEach(function (x) {
+          if (totSv[x.servicio] != null) totSv[x.servicio] += (x.adultos || 0) + (x.ninos || 0) + (x.bebes || 0);
+          else if (SALAS.indexOf(x.servicio) >= 0) salasMap[x.servicio] = (salasMap[x.servicio] || 0) + 1;
+        });
+        var salasTxt = SALAS.filter(function (s) { return salasMap[s]; }).map(function (s) { return s + ' (' + salasMap[s] + ' d.)'; }).join(', ');
+        var comidasTxt = sv.length
+          ? (totSv.Desayuno + ' desayunos · ' + totSv.Comida + ' comidas · ' + totSv.Cena + ' cenas · Salas: ' + (salasTxt ? esc(salasTxt) : '—'))
+          : '—';
+
+        var pend = pasosReserva(r).filter(function (p) { return p.e !== 'ok'; });
+        var faltaTxt = pend.length ? pend.map(function (p) { return esc(p.t); }).join(' · ') : 'Completa';
+
+        return '<div class="rp-ficha ' + (prov ? 'rp-prov' : 'rp-conf') + '">' +
+          '<div class="rp-ficha-cab"><div class="rp-ficha-tit">' + esc(rangoDias(r)) + ' · ' + esc((r.grupo || '').toUpperCase()) + '</div>' +
+          '<div class="rp-ficha-est"><b>' + estTxt + '</b> · ' + fzTxt + '</div></div>' +
+          '<div class="rp-grid">' +
+            '<div><small>Entrada</small>' + esc(diaCorto(r.entrada) + (r.horaEntrada ? ' · ' + r.horaEntrada : '')) + '</div>' +
+            '<div><small>Salida</small>' + esc(diaCorto(r.salida) + (r.horaSalida ? ' · ' + r.horaSalida : '')) + '</div>' +
+            '<div><small>Tipo y noches</small>' + (aloj ? ('Alojamiento · ' + noches(r) + (noches(r) === 1 ? ' noche' : ' noches')) : 'Día / sala') + '</div>' +
+            '<div><small>Personas</small>' + persHtml + '</div>' +
+            '<div><small>Habitaciones</small>' + habsHtml + '</div>' +
+            '<div><small>Alergias</small>' + alerHtml + '</div>' +
+            '<div><small>Responsable</small>' + respHtml + '</div>' +
+            '<div><small>Tel.</small>' + telHtml + '</div>' +
+            '<div><small>Correo</small>' + mailHtml + '</div>' +
+          '</div>' +
+          '<div class="rp-linea"><b>Comidas:</b> ' + comidasTxt + '</div>' +
+          (String(r.observaciones || '').trim() ? '<div class="rp-linea"><b>Notas:</b> ' + esc(String(r.observaciones).trim()) + '</div>' : '') +
+          '<div class="rp-linea rp-falta"><b>Falta:</b> ' + faltaTxt + '</div>' +
+          '</div>';
+      }).join('');
+      return '<div class="rp-bloque-mes"><h3 class="rp-mes">' + numMes + '. ' + esc(g.mes) + ' <small>' + esc(g.anio) + '</small></h3>' + fichas + '</div>';
+    }).join('');
+    return '<div id="relacionPdf" class="rel-pdf">' +
+      '<div class="rp-cab"><div class="rp-tit">Reservas · Casa María Madre</div>' +
+      '<div class="rp-meta"><div>' + esc(textoRango()) + '</div><div>impresa ' + legible(hoyTxt()) + '</div></div></div>' +
+      (cuerpo || '<p class="rp-vacio">No hay reservas en este periodo.</p>') +
+      '<div class="rp-pie">Una ficha rápida por reserva · color a la izquierda: verde confirmada, ocre provisional, gris bloqueo.</div>' +
+      '</div>';
+  }
   function htmlRelacion() {
     var grupos = datosRelacion();
     var cuerpo = grupos.map(function (g) {
@@ -508,7 +592,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         '<label class="campo"><span>Hasta</span><input class="entrada" id="rHasta" type="date" value="' + esc(S.relHasta) + '"></label></div>' : '') +
       '<div class="fila-btns" style="margin-top:6px"><button class="btn sec" id="rPdf">PDF / Imprimir</button><button class="btn sec" id="rCopiar">Copiar reservas</button></div></div>' +
       '<div class="tarjeta" id="relacion"><div class="rel-cab">Lista de reservas · ' + esc(C.NOMBRE_CASA || '') + '<small>' + esc(textoRango()) + '</small></div>' +
-      (cuerpo || '<div class="vacio">No hay reservas.</div>') + '</div>';
+      (cuerpo || '<div class="vacio">No hay reservas.</div>') + '</div>' +
+      htmlRelacionPdf(grupos);
   }
   function textoRango() {
     if (S.relModo !== 'rango') return 'Próximas y en curso (desde el ' + legible(hoyTxt()) + ')';
@@ -869,11 +954,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         '<div class="hoja-marco">' + htmlContrato(d) + '</div>';
       enlazarVolver(null, dest, true);
       if ($('#ctEnviar')) $('#ctEnviar').onclick = function () { enviarContrato(r); };
-      $('#ctPdf').onclick = function () {
-        var t = document.title; document.title = 'Condiciones · ' + r.grupo;
-        document.body.classList.add('imprimiendo-hoja'); window.print();
-        setTimeout(function () { document.body.classList.remove('imprimiendo-hoja'); document.title = t; }, 800);
-      };
+      $('#ctPdf').onclick = function () { imprimirDoc('imprimiendo-hoja', 'Condiciones · ' + r.grupo); };
     }).catch(function (e) { cargando(false); vista.innerHTML = '<div class="vacio">' + esc(e.message) + '</div>'; enlazarVolver(null, dest, true); });
   }
 
@@ -1095,7 +1176,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       (fTarjeta ? apartado('formulario', 'Formulario del grupo', esc(iForm >= 0 ? pasos[iForm].txt : ''), fTarjeta) : '') +
       (aloj && !canc ? apartado('habitaciones', 'Habitaciones', (r.asignaciones || []).length ? pernoctan(r) + ' pers. en ' + r.asignaciones.length + ' hab.' : 'Sin reparto',
         avisoReparto(r) + plano(r.asignaciones) + '<div class="fila-btns" style="margin-top:10px"><button class="btn sec" id="dReparto">Reparto de habitaciones</button>' +
-        ((r.asignaciones || []).length ? '<button class="btn sec" id="dHojaHab">Hoja de habitaciones</button>' : '') + '</div>') : '') +
+        ((r.asignaciones || []).length ? '<button class="btn sec" id="dHojaHab">Hoja de habitaciones</button><button class="btn sec" id="dLimpieza">Relación para limpieza</button>' : '') + '</div>') : '') +
       (!bloq && !canc ? apartado('estancia', 'Hoja de estancia', '', '<p class="sub" style="margin:0 0 10px">' + resumenServicios(r) + '</p>' +
         '<div class="fila-btns"><button class="btn sec" id="dServ">Servicios y datos</button><button class="btn sec" id="dHoja">Ver hoja de estancia</button></div>' +
         lineaAp(iLiq, 'Liquidación') + lineaAp(iFzL, 'Fianza') + lineaAp(iCob, 'Cobro')) : '') +
@@ -1136,6 +1217,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if (fTarjeta) enlazarFormulario(r);
     if ($('#dReparto')) $('#dReparto').onclick = function () { ir('reparto/' + encodeURIComponent(r.id) + '?desde=gestionar&ap=habitaciones'); };
     if ($('#dHojaHab')) $('#dHojaHab').onclick = function () { ir('habitaciones/' + encodeURIComponent(r.id) + '?desde=gestionar&ap=habitaciones'); };
+    if ($('#dLimpieza')) $('#dLimpieza').onclick = function () { mensajeLimpieza(r); };
     if ($('#dBitTodo')) $('#dBitTodo').onclick = function () { S.bitTodo = verTodo ? null : r.id; S.bitAbierta = r.id; pintarGestionar(r.id); };
     $('#dNota').onclick = function () {
       modal('<p><b>Añadir nota a la bitácora</b></p><textarea class="entrada" id="notaTxt" maxlength="300" rows="3" placeholder="Por ejemplo: llamé al responsable; confirmará el número el lunes."></textarea>' +
@@ -1636,41 +1718,112 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     return { lineas: lineas, total: Math.round(total * 100) / 100, consultar: consultar, senal: senal, pendiente: Math.round((total - senal) * 100) / 100 };
   }
 
-  function htmlHoja(r, modo) {
+  function importeFianza(r, c) {
+    if (r.pagaFianza === 'No') return 0;
+    var s = c ? c.senal : (+(String((r.grupoDatos || {}).senal || '').replace(',', '.')) || 0);
+    if (s > 0) return s;
+    var def = cfgNum('contrato.senal');
+    return def != null ? def : 200;
+  }
+  function ultimaMarcaFianzaDescontada(r) {
+    var b = ultimaNota(r, ['Fianza descontada', 'Fianza devuelta', 'Devolver fianza', 'Fianza: marca deshecha', 'Fianza: no llegó', 'Fianza pagada', 'Fianza pendiente', 'Fianza recordada', 'Señal pagada', 'Señal pendiente', 'Señal recordada']);
+    return !!(b && b.accion === 'Fianza descontada en la liquidación');
+  }
+
+  function htmlHoja(r, modo, descontarFz) {
     var liq = modo === 'liquidacion', m = mapaServ(r), g = r.grupoDatos || {}, c = calcularHoja(r);
     var gratis = +cfg('edad.gratis_hasta') || 4, adulto = +cfg('edad.adulto_desde') || 9;
-    var dias = diasDe(r), aloj = tipo(r) === 'Alojamiento';
-    var adMax = 0, niMax = 0, beMax = 0; (r.servicios || []).forEach(function (x) { if (SALAS.indexOf(x.servicio) < 0) { adMax = Math.max(adMax, x.adultos); niMax = Math.max(niMax, x.ninos); beMax = Math.max(beMax, x.bebes || 0); } });
+    var dias = diasDe(r);
+    var adMax = 0, niMax = 0, beMax = 0;
+    (r.servicios || []).forEach(function (x) {
+      if (SALAS.indexOf(x.servicio) < 0) { adMax = Math.max(adMax, x.adultos || 0); niMax = Math.max(niMax, x.ninos || 0); beMax = Math.max(beMax, x.bebes || 0); }
+    });
+    var fDat = r.formulario && r.formulario.datos;
+    if (!adMax && !niMax && !beMax && fDat && fDat.personas) {
+      adMax = fDat.personas.adultos || 0; niMax = fDat.personas.ninos || 0; beMax = fDat.personas.bebes || 0;
+    }
+    var persPartes = [];
+    if (adMax || niMax || beMax) {
+      if (adMax || (!niMax && !beMax)) persPartes.push(adMax + (adMax === 1 ? ' adulto' : ' adultos'));
+      if (niMax) persPartes.push(niMax + (niMax === 1 ? ' niño' : ' niños'));
+      if (beMax) persPartes.push(beMax + (beMax === 1 ? ' bebé' : ' bebés'));
+    } else {
+      var np = Number(r.personas) || 0;
+      persPartes.push(np + (np === 1 ? ' persona' : ' personas'));
+    }
+    var persHojaTxt = persPartes.join(' · ');
     function celda(t, sv) { var x = m[t + '|' + sv]; return x && (x.adultos || x.ninos || x.bebes) ? x.adultos + (x.ninos ? ' <small>+ ' + x.ninos + ' niños</small>' : '') + (x.bebes ? ' <small>+ ' + x.bebes + ' de 0-' + gratis + '</small>' : '') : '—'; }
     var filas = dias.map(function (t) {
       var salas = SALAS.filter(function (sa) { return m[t + '|' + sa]; }).join(', ');
       return '<tr><td class="l"><b>' + esc(diaCorto(t)) + '</b></td>' + COMIDAS.map(function (cm) { return '<td>' + celda(t, cm[0]) + '</td>'; }).join('') +
-        (aloj ? '<td>' + celda(t, 'Noche') + '</td>' : '') + '<td class="l">' + (esc(salas) || '—') + '</td></tr>';
+        '<td>' + celda(t, 'Noche') + '</td><td class="l">' + (esc(salas) || '—') + '</td></tr>';
     }).join('');
-    var pie = esc(cfg('texto.pie_pago')).replace('{dias}', esc(cfg('pago.dias_despues') || '5')).replace('{casa}', esc(cfg('casa.nombre'))).replace('{iban}', '<b>' + esc(cfg('casa.iban')) + '</b>');
+    var nombreCasa = cfg('casa.nombre') || 'Casa de Espiritualidad María Madre';
+    var dir1 = [cfg('casa.direccion'), cfg('casa.cp_ciudad'), cfg('casa.cif') ? 'CIF ' + cfg('casa.cif') : ''].filter(Boolean).map(esc).join(' · ');
+    var dir2 = [cfg('casa.telefono'), cfg('casa.email')].filter(Boolean).map(esc).join(' · ');
+    var pagaFz = r.pagaFianza !== 'No';
+    var fzPag = pagaFz && senalPagada(r).pagada;
+    var impFz = importeFianza(r, c);
     var hoy = legible(hoyTxt());
+
+    var condHtml = '<div class="hd-cond"><b>Condiciones</b><br>Niños de 0 a ' + gratis + ' años: gratis. De ' + (gratis + 1) + ' a ' + (adulto - 1) + ' años: precio de niño. A partir de ' + adulto + ' años: como adulto.<br>' +
+      (cfgNum('precio.solo_uso') != null ? 'Solo uso de la casa (calefacción, luz, agua…): ' + euros(cfgNum('precio.solo_uso')) + ' por persona.<br>' : '') +
+      (cfg('texto.condiciones') ? esc(cfg('texto.condiciones')) + (liq ? '' : '<br>') : '') +
+      (liq ? '' : 'Las cantidades se ajustan en la liquidación a los servicios realmente prestados.') + '</div>';
+
+    var totHtml = '';
+    if (!liq) {
+      totHtml = '<div class="hd-tot">' +
+        '<div class="hd-tot-prin"><b>Total previsto*</b><b>' + euros(c.total) + '</b></div>' +
+        (pagaFz ? '<div class="hd-tot-fz"><span>Fianza</span><b>' + euros(impFz) + '</b></div>' +
+          '<small class="hd-tot-nota">Se paga al aceptar y confirma la reserva. Se descuenta en la liquidación o se devuelve después.</small>' : '') +
+        '<small class="hd-tot-ast">* Sin incluir los conceptos «a consultar».</small></div>';
+    } else if (fzPag && descontarFz) {
+      var aPagar = Math.max(0, Math.round((c.total - impFz) * 100) / 100);
+      totHtml = '<div class="hd-tot">' +
+        '<div><span>Total servicios*</span><b>' + euros(c.total) + '</b></div>' +
+        '<div><span>Fianza ya pagada</span><span>− ' + euros(impFz) + '</span></div>' +
+        '<div class="hd-pend"><b>A pagar</b><b>' + euros(aPagar) + '</b></div>' +
+        '<small class="hd-tot-ast">* Sin incluir los conceptos «a consultar».</small></div>';
+    } else {
+      totHtml = '<div class="hd-tot">' +
+        '<div><span>Total servicios*</span><b>' + euros(c.total) + '</b></div>' +
+        '<div class="hd-pend"><b>A pagar</b><b>' + euros(c.total) + '</b></div>' +
+        (fzPag ? '<small class="hd-tot-nota">La fianza no se descuenta: se devuelve después.</small>' : '') +
+        '<small class="hd-tot-ast">* Sin incluir los conceptos «a consultar».</small></div>';
+    }
+
+    var diasPago = esc(cfg('pago.dias_despues') || '5'), iban = esc(cfg('casa.iban'));
+    var pieLiq = cfg('texto.pie_pago')
+      ? esc(cfg('texto.pie_pago')).replace('{dias}', diasPago).replace('{casa}', esc(nombreCasa)).replace('{iban}', '<b>' + iban + '</b>')
+      : 'Ingreso en los ' + diasPago + ' días siguientes al evento, en la cuenta <b>' + iban + '</b>.';
+    var pieHtml = liq
+      ? '<div class="hd-pie">' + pieLiq + '<br><span>Cantidades realmente servidas, revisadas por el gestor.</span></div>'
+      : (pagaFz ? '<div class="hd-pie">Fianza: ingreso en los 7 días siguientes a la aceptación, en la cuenta <b>' + iban + '</b>, concepto «Fianza – ' + esc(r.grupo) + ' – ' + legible(r.entrada) + '».</div>' : '');
+
+    var entTxt = [g.entidad, g.cif].filter(Boolean).map(esc).join(' · ') || '—';
+    if (g.direccion) entTxt += '<br>' + esc(g.direccion);
+
     return '<div class="hoja-doc">' +
-      '<div class="hd-cab"><div><div class="hd-casa">' + esc(cfg('casa.nombre') || 'Casa de Espiritualidad María Madre') + '</div>' +
-      '<div class="hd-dir">' + esc(cfg('casa.direccion')) + ' · ' + esc(cfg('casa.cp_ciudad')) + ' · CIF ' + esc(cfg('casa.cif')) + '</div>' +
-      '<div class="hd-dir">' + esc(cfg('casa.telefono')) + ' · ' + esc(cfg('casa.email')) + '</div></div>' +
+      '<div class="hd-cab"><div><div class="hd-casa">' + esc(nombreCasa) + '</div>' +
+      (dir1 ? '<div class="hd-dir">' + dir1 + '</div>' : '') +
+      (dir2 ? '<div class="hd-dir">' + dir2 + '</div>' : '') + '</div>' +
       '<div class="hd-tit"><div>Hoja de estancia</div><span class="hd-sello' + (liq ? ' liq' : '') + '">' + (liq ? 'LIQUIDACIÓN' : 'PRESUPUESTO') + '</span><small>Ref. ' + esc(r.id) + ' · ' + hoy + '</small></div></div>' +
       '<div class="hd-datos">' +
-      '<div><small>GRUPO</small><b>' + esc(r.grupo) + '</b></div>' +
-      '<div><small>RESPONSABLE</small>' + esc(r.responsable || '—') + (r.telefono ? ' · ' + esc(r.telefono) : '') + (r.email ? ' · ' + esc(r.email) : '') + '</div>' +
-      '<div><small>ENTRADA</small>' + esc(diaSemana(r.entrada)) + ', ' + esc(r.horaEntrada) + '</div>' +
-      '<div><small>SALIDA</small>' + esc(diaSemana(r.salida)) + ', ' + esc(r.horaSalida) + '</div>' +
-      '<div><small>PERSONAS</small>' + adMax + ' adultos' + (niMax ? ' · ' + niMax + ' niños (' + (gratis + 1) + ' a ' + (adulto - 1) + ' años)' : '') + (beMax ? ' · ' + beMax + ' de 0 a ' + gratis + ' años' : '') + '</div>' +
-      '<div><small>ENTIDAD Y CIF</small>' + (esc(g.entidad) || '—') + (g.cif ? ' · ' + esc(g.cif) : '') + (g.direccion ? '<br>' + esc(g.direccion) : '') + '</div></div>' +
+      '<div><small>Grupo</small><b>' + esc(r.grupo) + '</b></div>' +
+      '<div><small>Responsable</small>' + (esc([r.responsable, r.telefono].filter(Boolean).join(' · ')) || '—') + '</div>' +
+      '<div><small>Entrada</small>' + esc(fechaLargaDia(r.entrada) + (r.horaEntrada ? ', ' + r.horaEntrada : '')) + '</div>' +
+      '<div><small>Salida</small>' + esc(fechaLargaDia(r.salida) + (r.horaSalida ? ', ' + r.horaSalida : '')) + '</div>' +
+      '<div><small>Personas</small>' + esc(persHojaTxt) + '</div>' +
+      '<div><small>Entidad, CIF y domicilio</small>' + entTxt + '</div></div>' +
       (r.servicios && r.servicios.length ? '' : '<p class="hd-aviso">Todavía no hay servicios apuntados para esta reserva.</p>') +
-      '<h4>Servicios por día</h4><table class="hd-tabla"><tr><th class="l">Día</th>' + COMIDAS.map(function (cm) { return '<th>' + cm[0] + '</th>'; }).join('') + (aloj ? '<th>Noche</th>' : '') + '<th class="l">Salas</th></tr>' + filas + '</table>' +
-      '<h4>Importe</h4><table class="hd-tabla"><tr><th class="l">Concepto</th><th class="r">Unidades</th><th class="r">Precio</th><th class="r">Importe</th></tr>' +
+      '<h4>' + (liq ? 'Servicios por día' : 'Servicios previstos por día') + '</h4><table class="hd-tabla"><tr><th class="l">Día</th>' + COMIDAS.map(function (cm) { return '<th>' + cm[0] + '</th>'; }).join('') + '<th>Noche</th><th class="l">Salas</th></tr>' + filas + '</table>' +
+      '<h4>' + (liq ? 'Importe' : 'Importe previsto') + '</h4><table class="hd-tabla"><tr><th class="l">Concepto</th><th class="r">Unidades</th><th class="r">Precio</th><th class="r">Importe</th></tr>' +
       c.lineas.map(function (l) { return '<tr><td class="l">' + esc(l.txt) + '</td><td class="r">' + l.u + '</td><td class="r">' + euros(l.p) + '</td><td class="r">' + (l.imp == null ? '—' : euros(l.imp)) + '</td></tr>'; }).join('') +
       (c.lineas.length ? '' : '<tr><td class="l" colspan="4">—</td></tr>') + '</table>' +
-      '<div class="hd-fin"><div class="hd-cond"><b>Condiciones</b><br>Niños de 0 a ' + gratis + ' años: gratis. De ' + (gratis + 1) + ' a ' + (adulto - 1) + ' años: precio de niño. A partir de ' + adulto + ' años: como adulto.<br>' +
-      (cfgNum('precio.solo_uso') != null ? 'Solo uso de la casa (calefacción, luz, agua…): ' + euros(cfgNum('precio.solo_uso')) + ' por persona.<br>' : '') + esc(cfg('texto.condiciones')) + '</div>' +
-      '<div class="hd-tot"><div><span>Total' + (c.consultar ? '*' : '') + '</span><b>' + euros(c.total) + '</b></div><div><span>Fianza pagada</span><span>' + euros(c.senal) + '</span></div>' +
-      '<div class="hd-pend"><b>Pendiente</b><b>' + euros(c.pendiente) + '</b></div>' + (c.consultar ? '<small>* Sin incluir los conceptos «a consultar».</small>' : '') + '</div></div>' +
-      '<div class="hd-pie">' + pie + '<br><span>' + (liq ? 'Cantidades realmente servidas, revisadas por el gestor.' : 'Calculado con los servicios previstos. La liquidación final se hará con lo realmente servido.') + '</span></div>' +
+      '<div class="hd-fin">' + condHtml + totHtml + '</div>' +
+      pieHtml +
+      '<div class="hd-doc-nombre">' + (liq ? 'Hoja de estancia · Liquidación' : 'Hoja de estancia · Presupuesto') + ' · ' + esc(nombreCasa) + '</div>' +
       '</div>';
   }
 
@@ -1681,14 +1834,23 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if (!r) { vista.innerHTML = botonVolver() + '<div class="vacio">La reserva no existe.</div>'; enlazarVolver(null, dest, true); return; }
     modo = modo === 'liquidacion' ? 'liquidacion' : 'presupuesto';
     var sufOrigen = (q.desde ? '&desde=' + encodeURIComponent(q.desde) : '') + (q.ap ? '&ap=' + encodeURIComponent(q.ap) : '');
+    var mostrarIntFz = modo === 'liquidacion' && r.pagaFianza !== 'No' && senalPagada(r).pagada;
+    var descontarFz = mostrarIntFz ? ultimaMarcaFianzaDescontada(r) : false;
     vista.innerHTML = botonVolver() +
       '<div class="hoja-barra"><div class="segmento" id="hModo"><button type="button" data-m="presupuesto"' + (modo === 'presupuesto' ? ' class="activo"' : '') + '>Presupuesto</button><button type="button" data-m="liquidacion"' + (modo === 'liquidacion' ? ' class="activo"' : '') + '>Liquidación</button></div>' +
       '<div class="fila-btns"><button class="btn sec" id="hServ">Corregir servicios</button><button class="btn sec" id="hXls">Descargar Excel</button><button class="btn" id="hPdf">Imprimir / PDF</button>' +
         (modo === 'liquidacion' ? '<button class="btn" id="hEnviar">Enviar al grupo</button>' : '') + '</div></div>' +
-      '<div class="hoja-marco">' + htmlHoja(r, modo) + '</div>';
+      (mostrarIntFz ? '<label class="hoja-switch" for="hDescFz"><input type="checkbox" id="hDescFz" role="switch"' + (descontarFz ? ' checked' : '') + '><span class="hoja-switch-ui" aria-hidden="true"></span><span class="hoja-switch-txt">Descontar la fianza en esta liquidación</span></label>' : '') +
+      '<div class="hoja-marco" id="hMarco">' + htmlHoja(r, modo, descontarFz) + '</div>';
     enlazarVolver(null, dest, true);
     $('#hModo').onclick = function (e) { var b = e.target.closest('button'); if (b) reemplazar('hoja/' + encodeURIComponent(r.id) + '?modo=' + b.dataset.m + sufOrigen); };
-    if ($('#hEnviar')) $('#hEnviar').onclick = function () { mensajeGrupo(r, 'liquidacion', ''); };  // 2.5.5
+    if ($('#hDescFz')) $('#hDescFz').onchange = function () {
+      descontarFz = this.checked;
+      $('#hMarco').innerHTML = htmlHoja(r, modo, descontarFz);
+    };
+    if ($('#hEnviar')) $('#hEnviar').onclick = function () {
+      mensajeGrupo(r, 'liquidacion', '', null, (mostrarIntFz && descontarFz) ? ['fianza_descontada'] : []);
+    };
     $('#hServ').onclick = function () { ir('servicios/' + encodeURIComponent(r.id) + '?desde=hoja&modo=' + modo + (q.ap ? '&ap=' + encodeURIComponent(q.ap) : '')); };
     $('#hXls').onclick = function () {
       cargando(true);
@@ -1696,9 +1858,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
         .catch(function (e) { toast(e.message || 'No se pudo crear el Excel.', true); }).then(function () { cargando(false); });
     };
     $('#hPdf').onclick = function () {
-      var t = document.title; document.title = (modo === 'liquidacion' ? 'Liquidación' : 'Presupuesto') + ' · ' + r.grupo;
-      document.body.classList.add('imprimiendo-hoja'); window.print();
-      setTimeout(function () { document.body.classList.remove('imprimiendo-hoja'); document.title = t; }, 800);
+      imprimirDoc('imprimiendo-hoja', (modo === 'liquidacion' ? 'Liquidación' : 'Presupuesto') + ' · ' + r.grupo);
     };
   }
 
@@ -1939,12 +2099,16 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     return d.length === 9 ? '34' + d : d;
   }
   /** Pantalla «Enviar al grupo»: el mensaje que toca, editable, y WhatsApp / Correo / Copiar. */
-  function mensajeGrupo(r, cual, enlace, alCerrar) {
+  function mensajeGrupo(r, cual, enlace, alCerrar, extraLogs) {
     var M = MENSAJES[cual] || MENSAJES.formulario;
-    var apuntado = {};
+    var apuntado = {}, cola = Promise.resolve();
     function apuntar(t) {
-      t = M.log || t;
-      if (!t || apuntado[t] || S.sinConexion) return; apuntado[t] = 1; usarDB(function () { return DB.anotar(r.id, t); }).catch(function () {});
+      var lista = [M.log || t].concat(extraLogs || []).filter(Boolean);
+      lista.forEach(function (k) {
+        if (apuntado[k] || S.sinConexion) return;
+        apuntado[k] = 1;
+        cola = cola.then(function () { return usarDB(function () { return DB.anotar(r.id, k); }).catch(function () {}); });
+      });
     }
     var asunto = M.asunto + ' · Casa María Madre · ' + (r.grupo || '');
     if (cual === 'presupuesto_actualizado') apuntar();
@@ -1959,7 +2123,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       function (e, cerrar) {
         var b = e.target.closest('[data-r]'); if (!b) return;
         var txt = $('#msjTxt').value;
-        if (b.dataset.r === '0') { cerrar(); if (alCerrar) alCerrar(); else pintar(); return; }
+        if (b.dataset.r === '0') { cerrar(); cola.then(function () { if (alCerrar) alCerrar(); else pintar(); }); return; }
         if (b.dataset.r === 'wa') { apuntar('enlace_whatsapp'); window.open('https://wa.me/' + telWhatsApp(r.telefono) + '?text=' + encodeURIComponent(txt), '_blank', 'noopener'); return; }
         if (b.dataset.r === 'mail') { apuntar('enlace_correo'); location.href = 'mailto:' + encodeURIComponent(r.email || '').replace(/%40/g, '@') + '?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(txt); return; }
         if (b.dataset.r === 'copiar') {
@@ -2249,12 +2413,73 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       gel: cfgNum('consumo.hab.gel') || 0
     };
   }
-  function htmlHojaHab(r) {
+  function calcularHojaHab(r) {
     var n = noches(r), lista = (r.asignaciones || []).slice().sort(function (a, b) { return a.habitacion - b.habitacion; });
     var T = { p: 0, cama: 0, tg: 0, tp: 0, rollos: 0, gel: 0 };
-    var filas = lista.map(function (a) {
+    var items = lista.map(function (a) {
       var h = hab(a.habitacion) || {}, c = consumosHab(a.personas, n);
       T.p += a.personas; T.cama += c.cama; T.tg += c.tg; T.tp += c.tp; T.rollos += c.rollos; T.gel += c.gel;
+      return { a: a, h: h, c: c };
+    });
+    return { noches: n, items: items, total: T };
+  }
+  function diaCortoLimp(t) {
+    var d = aFecha(t);
+    return d.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '') + ' ' + d.getDate() + '/' + (d.getMonth() + 1);
+  }
+  function usoLimpieza(a, h) {
+    var u = String(a.uso || '');
+    if (u === 'Matrimonio') return 'matrimonio';
+    if (u === 'Individual') return 'individual';
+    if (u === 'Jóvenes') return esLiteras(h) ? 'literas' : (a.personas === 1 ? '1 cama' : a.personas + ' camas');
+    if (u === 'Compartida') return a.personas === 1 ? '1 cama' : a.personas + ' camas';
+    if (esLiteras(h)) return 'literas';
+    return a.personas === 1 ? '1 cama' : a.personas + ' camas';
+  }
+  function textoLimpieza(r) {
+    var d = calcularHojaHab(r), T = d.total;
+    var lineasHab = d.items.map(function (it) {
+      return 'Hab. ' + it.a.habitacion + ' · ' + usoLimpieza(it.a, it.h) + ' · ' + it.a.personas + ' pers.';
+    });
+    var fh = (r.formulario && r.formulario.datos && r.formulario.datos.habitaciones) || {};
+    var esp = [];
+    if (fh.movilidad) esp.push(fh.movilidad + (fh.movilidad === 1 ? ' persona con movilidad reducida' : ' personas con movilidad reducida'));
+    if (fh.observaciones && String(fh.observaciones).trim()) esp.push(String(fh.observaciones).trim());
+    var prep = [
+      'PREPARAR',
+      'Juegos de cama: ' + T.cama,
+      'Toallas: ' + T.tg + ' ' + (T.tg === 1 ? 'grande' : 'grandes') + ' + ' + T.tp + ' ' + (T.tp === 1 ? 'pequeña' : 'pequeñas'),
+      'Papel higiénico: ' + T.rollos + ' ' + (T.rollos === 1 ? 'rollo' : 'rollos') + ' · Gel: ' + T.gel
+    ];
+    if (esp.length) prep.push('Necesidades especiales: ' + esp.join(' · '));
+    return 'HABITACIONES · ' + (r.grupo || '') + '\n' +
+      'Entrada ' + diaCortoLimp(r.entrada) + ' · ' + (r.horaEntrada || '12:00') + ' — Salida ' + diaCortoLimp(r.salida) + ' · ' + (r.horaSalida || '16:00') + '\n' +
+      T.p + (T.p === 1 ? ' persona' : ' personas') + ' · ' + d.items.length + (d.items.length === 1 ? ' habitación' : ' habitaciones') + '\n\n' +
+      lineasHab.join('\n') + '\n\n' +
+      prep.join('\n');
+  }
+  function mensajeLimpieza(r) {
+    modal('<div style="font-size:14px;color:#6F6560;margin-bottom:6px">Relación para limpieza · <b>' + esc(r.grupo || '') + '</b></div>' +
+      '<label class="sub" for="msjLimpTxt" style="display:block;margin:6px 0 4px">Texto (puedes cambiarlo antes de enviar)</label>' +
+      '<textarea class="entrada" id="msjLimpTxt" style="min-height:260px;line-height:1.45;font-family:inherit">' + esc(textoLimpieza(r)) + '</textarea>' +
+      '<div class="fila-btns" style="margin-top:10px"><button class="btn" data-r="wa" style="background:#2E7D4F;border-color:#2E7D4F">WhatsApp</button><button class="btn sec" data-r="copiar">Copiar</button></div>' +
+      '<div class="fila-btns" style="margin-top:8px"><button class="btn borde" data-r="0">‹ Volver</button></div>',
+      function (e, cerrar) {
+        var b = e.target.closest('[data-r]'); if (!b) return;
+        var txt = $('#msjLimpTxt').value;
+        if (b.dataset.r === '0') { cerrar(); return; }
+        if (b.dataset.r === 'wa') { window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank', 'noopener'); return; }
+        if (b.dataset.r === 'copiar') {
+          var i = $('#msjLimpTxt');
+          (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { toast('Relación copiada'); })
+            .catch(function () { try { i.select(); document.execCommand('copy'); toast('Relación copiada'); } catch (x) { toast('Mantén pulsado el texto para copiarlo.', true); } });
+        }
+      });
+  }
+  function htmlHojaHab(r) {
+    var d = calcularHojaHab(r), n = d.noches, T = d.total;
+    var filas = d.items.map(function (it) {
+      var a = it.a, h = it.h, c = it.c;
       return '<tr><td class="l"><b>' + a.habitacion + '</b></td><td class="l">' + esc(h.tipo || '') + '</td><td class="l">' + esc(a.uso || '—') + '</td><td>' + a.personas + '</td>' +
         '<td>' + c.cama + '</td><td>' + c.tg + '</td><td>' + c.tp + '</td><td>' + c.rollos + '</td><td>' + c.gel + '</td></tr>';
     }).join('');
@@ -2269,7 +2494,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
       '<div><small>RESPONSABLE</small>' + esc(r.responsable || '—') + (r.telefono ? ' · ' + esc(r.telefono) : '') + '</div>' +
       '<div><small>ENTRADA</small>' + esc(diaSemana(r.entrada)) + ', ' + esc(r.horaEntrada) + '</div>' +
       '<div><small>SALIDA</small>' + esc(diaSemana(r.salida)) + ', ' + esc(r.horaSalida) + '</div>' +
-      '<div><small>PERNOCTAN</small>' + T.p + ' personas en ' + lista.length + ' habitaciones · ' + n + ' noches</div>' +
+      '<div><small>PERNOCTAN</small>' + T.p + ' personas en ' + d.items.length + ' habitaciones · ' + n + ' noches</div>' +
       '<div><small>NIÑOS DE 0 A ' + (cfg('edad.gratis_hasta') || 4) + '</small>' + (bebes ? bebes + ' (no ocupan cama; consultar si necesitan algo)' : 'ninguno') + '</div></div>' +
       '<h4>Plano</h4>' + plano(r.asignaciones) +
       '<h4>Preparación por habitación</h4><table class="hd-tabla"><tr><th class="l">Hab.</th><th class="l">Tipo</th><th class="l">Uso</th><th>Pax</th><th>Juegos cama</th><th>Toallas grandes</th><th>Toallas pequeñas</th><th>Papel</th><th>Gel</th></tr>' +
@@ -2284,16 +2509,16 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     var q = ruta().q || {};
     var dest = destinoTrabajo(id, 'habitaciones');
     if (!r) { vista.innerHTML = botonVolver() + '<div class="vacio">La reserva no existe.</div>'; enlazarVolver(null, dest, true); return; }
+    var tieneHabs = (r.asignaciones || []).length > 0;
     vista.innerHTML = botonVolver() +
-      '<div class="hoja-barra"><div class="fila-btns"><button class="btn sec" id="hhRep">Cambiar reparto</button><button class="btn" id="hhPdf">Imprimir / PDF</button></div></div>' +
+      '<div class="hoja-barra"><div class="fila-btns"><button class="btn sec" id="hhRep">Cambiar reparto</button>' +
+      (tieneHabs ? '<button class="btn sec" id="hhLimpieza">Relación para limpieza</button>' : '') +
+      '<button class="btn" id="hhPdf">Imprimir / PDF</button></div></div>' +
       '<div class="hoja-marco">' + htmlHojaHab(r) + '</div>';
     enlazarVolver(null, dest, true);
     $('#hhRep').onclick = function () { ir('reparto/' + encodeURIComponent(r.id) + '?desde=habitaciones' + (q.ap ? '&ap=' + encodeURIComponent(q.ap) : '')); };
-    $('#hhPdf').onclick = function () {
-      var t = document.title; document.title = 'Habitaciones · ' + r.grupo;
-      document.body.classList.add('imprimiendo-hoja'); window.print();
-      setTimeout(function () { document.body.classList.remove('imprimiendo-hoja'); document.title = t; }, 800);
-    };
+    if ($('#hhLimpieza')) $('#hhLimpieza').onclick = function () { mensajeLimpieza(r); };
+    $('#hhPdf').onclick = function () { imprimirDoc('imprimiendo-hoja', 'Habitaciones · ' + r.grupo); };
   }
 
   // ---------------- 2.2.1 · Ficha imprimible de la reserva (uso interno) ----------------

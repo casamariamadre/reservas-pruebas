@@ -880,3 +880,197 @@ h3 { font-size: 0.8125rem; }
   .sv-pers { gap: 6px; }
   .rep-fila { flex-wrap: wrap; }
 }
+
+/* ===================== v2.5.6 · Bloque 2D: salidas a PDF y relación para limpieza ===================== */
+.hd-sello.liq { background: #1E5A37; }
+.hd-datos small { text-transform: uppercase; font-weight: 600; }
+.hd-tot { flex: 0 1 260px; }
+.hd-tot-prin { font-size: 1.05em; }
+.hd-tot-fz { border-top: 1px solid #ddd5cc; padding-top: 5px; margin-top: 2px; }
+.hd-tot-nota { display: block; line-height: 1.35; color: #444 !important; margin-top: 2px; }
+.hd-tot-ast { display: block; line-height: 1.3; color: #666; margin-top: 4px; }
+.hd-doc-nombre { margin-top: 12px; padding-top: 6px; border-top: 1px dotted #ddd5cc; font-size: 12px; color: #666; text-align: center; }
+
+/* Interruptor «Descontar la fianza en esta liquidación» (solo en pantalla) */
+.hoja-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--tarjeta);
+  border: 1.5px solid var(--linea);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  min-height: 48px;
+  cursor: pointer;
+  user-select: none;
+}
+.hoja-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+.hoja-switch-ui {
+  position: relative;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: #C8BEB6;
+  transition: background .18s;
+}
+.hoja-switch-ui::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.28);
+  transition: transform .18s;
+}
+.hoja-switch input:checked + .hoja-switch-ui { background: #1E5A37; }
+.hoja-switch input:checked + .hoja-switch-ui::after { transform: translateX(20px); }
+.hoja-switch input:focus-visible + .hoja-switch-ui { outline: 2px solid var(--pri); outline-offset: 2px; }
+.hoja-switch-txt { font-weight: 600; font-size: 0.9375rem; line-height: 1.3; overflow-wrap: anywhere; }
+
+/* Lista de reservas en PDF (oculta en pantalla; sustituye a #relacion al imprimir) */
+.rel-pdf { display: none; }
+
+@media print {
+  @page { size: A4; margin: 14mm; }
+
+  /* Limpieza común al imprimir documentos */
+  body.imprimiendo-hoja .hoja-switch,
+  body[data-vista="hoja"] .barra, body[data-vista="hoja"] .menu, body[data-vista="hoja"] .aviso,
+  body[data-vista="hoja"] .volver, body[data-vista="hoja"] .hoja-barra, body[data-vista="hoja"] .hoja-switch,
+  body[data-vista="habitaciones"] .barra, body[data-vista="habitaciones"] .menu, body[data-vista="habitaciones"] .aviso,
+  body[data-vista="habitaciones"] .volver, body[data-vista="habitaciones"] .hoja-barra,
+  body[data-vista="contrato"] .barra, body[data-vista="contrato"] .menu, body[data-vista="contrato"] .aviso,
+  body[data-vista="contrato"] .volver, body[data-vista="contrato"] .hoja-barra,
+  .toast, #modal, #cargando, .franja-pruebas { display: none !important; }
+
+  body[data-vista="hoja"] #app, body[data-vista="habitaciones"] #app, body[data-vista="contrato"] #app { display: block !important; height: auto !important; }
+  body[data-vista="hoja"] main, body[data-vista="habitaciones"] main, body[data-vista="contrato"] main { overflow: visible !important; padding: 0 !important; }
+  body[data-vista="hoja"] .hoja-marco, body[data-vista="habitaciones"] .hoja-marco, body[data-vista="contrato"] .hoja-marco { overflow: visible !important; padding: 0 !important; }
+
+  /* Tipografía e impresión A4 de hojas (11–12 pt cuerpo, nunca menos de 10 pt) */
+  .hoja-doc:not(.hf-doc) { box-shadow: none !important; max-width: none !important; min-width: 0 !important; padding: 0 !important; font-size: 11.5pt; line-height: 1.4; color: #1a1a1a; }
+  .hoja-doc:not(.hf-doc) .hd-casa { font-size: 16pt; }
+  .hoja-doc:not(.hf-doc) .hd-tit > div { font-size: 16pt; }
+  .hoja-doc:not(.hf-doc) h4 { font-size: 13pt; margin: 13px 0 5px; }
+  .hoja-doc:not(.hf-doc) .hd-dir,
+  .hoja-doc:not(.hf-doc) .hd-tit small,
+  .hoja-doc:not(.hf-doc) .hd-datos small,
+  .hoja-doc:not(.hf-doc) .hd-tabla th,
+  .hoja-doc:not(.hf-doc) .hd-tabla td small,
+  .hoja-doc:not(.hf-doc) .hd-tot small,
+  .hoja-doc:not(.hf-doc) .hd-doc-nombre,
+  .hoja-doc:not(.hf-doc) .leyenda,
+  .hoja-doc:not(.hf-doc) .hab,
+  .hoja-doc:not(.hf-doc) .pasillo,
+  .contrato-doc small { font-size: 10pt !important; }
+  .hoja-doc:not(.hf-doc) .hd-sello { font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .hoja-doc:not(.hf-doc) .hd-cond,
+  .hoja-doc:not(.hf-doc) .hd-pie { font-size: 10.5pt; line-height: 1.45; }
+  .hoja-doc:not(.hf-doc) .hd-datos { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .hoja-doc:not(.hf-doc) .hd-fin { flex-wrap: nowrap; }
+  .hoja-doc:not(.hf-doc) .plano-fila,
+  .hoja-doc:not(.hf-doc) .pasillo { min-width: 0; }
+  .hoja-doc:not(.hf-doc) .hab,
+  .hoja-doc:not(.hf-doc) .leyenda i { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .hoja-doc:not(.hf-doc) .hd-fin,
+  .hoja-doc:not(.hf-doc) .ct-firmas { break-inside: avoid; }
+
+  /* Impresión de la lista de reservas (PDF 5: fichas rápidas) */
+  body.imprimiendo .barra, body.imprimiendo .menu, body.imprimiendo .aviso,
+  body.imprimiendo .segmento, body.imprimiendo .rel-filtro, body.imprimiendo #relacion,
+  body[data-vista="reservas"] .barra, body[data-vista="reservas"] .menu, body[data-vista="reservas"] .aviso,
+  body[data-vista="reservas"] #lFiltro, body[data-vista="reservas"] .rel-filtro { display: none !important; }
+  body[data-vista="reservas"] #app { display: block !important; height: auto !important; }
+  body[data-vista="reservas"] main { overflow: visible !important; padding: 0 !important; }
+  body[data-vista="reservas"] #relacion:has(+ #relacionPdf) { display: none !important; }
+  body.imprimiendo #relacionPdf,
+  body[data-vista="reservas"] #relacionPdf { display: block !important; color: #1a1a1a; font-size: 11pt; line-height: 1.38; }
+
+  .rp-cab {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    border-bottom: 2.5px solid #85200C;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .rp-tit { font-family: Georgia, "Times New Roman", serif; font-size: 17pt; font-weight: 700; color: #85200C; }
+  .rp-meta { text-align: right; font-size: 10pt; color: #444; line-height: 1.35; }
+  .rp-mes {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 13pt;
+    font-weight: 700;
+    color: #85200C;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin: 14px 0 6px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid #ddd5cc;
+    break-after: avoid;
+  }
+  .rp-mes small { font-size: 10pt; color: #666; font-weight: 400; }
+  .rp-ficha {
+    border: 1px solid #d8d0c8;
+    border-left: 5px solid #1E5A37;
+    border-radius: 6px;
+    padding: 8px 11px;
+    margin-bottom: 8px;
+    background: #fff;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .rp-ficha.rp-conf { border-left-color: #1E5A37; }
+  .rp-ficha.rp-prov { border-left-color: #B9770E; }
+  .rp-ficha.rp-bloq { border-left-color: #6B7280; padding: 6px 11px; background: #F7F7F8; }
+  .rp-bloq-linea { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 11pt; }
+  .rp-bloq-linea b { font-family: Georgia, "Times New Roman", serif; }
+  .rp-bloq-linea span { font-size: 10pt; color: #4B5563; font-weight: 600; }
+  .rp-ficha-cab {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    border-bottom: 1px solid #ece6e0;
+    padding-bottom: 4px;
+    margin-bottom: 6px;
+  }
+  .rp-ficha-tit { font-family: Georgia, "Times New Roman", serif; font-size: 12pt; font-weight: 700; color: #1a1a1a; }
+  .rp-ficha-est { font-size: 10pt; color: #333; white-space: nowrap; }
+  .rp-ficha.rp-conf .rp-ficha-est b { color: #1E5A37; }
+  .rp-ficha.rp-prov .rp-ficha-est b { color: #9A5B00; }
+  .rp-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px 12px;
+    margin-bottom: 5px;
+    font-size: 10.5pt;
+  }
+  .rp-grid > div { min-width: 0; overflow-wrap: anywhere; }
+  .rp-grid small { display: block; font-size: 10pt; color: #666; font-weight: 600; }
+  .rp-linea { font-size: 10.5pt; margin-top: 3px; overflow-wrap: anywhere; }
+  .rp-falta { border-top: 1px dotted #e2dad2; padding-top: 3px; margin-top: 4px; }
+  .rp-rojo { color: #B42318; font-weight: 700; }
+  .rp-ocre { color: #9A5B00; font-weight: 600; }
+  .rp-vacio { font-size: 11pt; color: #555; padding: 12px 0; }
+  .rp-pie {
+    margin-top: 12px;
+    padding-top: 6px;
+    border-top: 1px solid #ddd5cc;
+    font-size: 10pt;
+    color: #555;
+    text-align: center;
+  }
+}
