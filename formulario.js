@@ -61,7 +61,9 @@
       F.contacto = Object.assign({ responsable: r.responsable || '', telefono: r.telefono || '', email: r.email || '' }, F.contacto || {});
       F.habitaciones = Object.assign({ matrimonios: 0, comparten: 0, individual: 0, literas: 0, movilidad: 0, observaciones: '' }, F.habitaciones || {});
       if (F.habitaciones.movilidad) { F.habitaciones.comparten += F.habitaciones.movilidad; F.habitaciones.movilidad = 0; }
-      F.consentimientos = F.consentimientos || { datos: false, imagenes: false, autorizacion: false }; return; }
+      F.consentimientos = F.consentimientos || { datos: false, imagenes: false, autorizacion: false };
+      usarGuardado();  // 2.5.4: si ya se aplicó, manda lo guardado después (comidas quitadas, cambios del gestor)
+      return; }
     F = {
       contacto: { responsable: r.responsable || '', telefono: r.telefono || '', email: r.email || '' },
       grupo: { entidad: g.entidad || '', cif: g.cif || '', direccion: g.direccion || '', representante: g.representante || '', dni: g.dni || '', cargo: g.cargo || '' },
@@ -72,7 +74,19 @@
       consentimientos: { datos: false, imagenes: false, autorizacion: false }
     };
     (r.servicios || []).forEach(function (x) { if (INFO.salas.indexOf(x.servicio) >= 0) F.salaSet[x.fecha + '|' + x.servicio] = true; });
-    rellenarServicios();
+    if (!usarGuardado()) rellenarServicios();
+  }
+  /** 2.5.4: manda lo último que se actualizó. Si la reserva ya tiene comidas guardadas (y no hay un formulario enviado
+      sin aplicar), la tabla sale con ellas: una comida quitada sale a 0 y no se vuelve a llenar. */
+  function usarGuardado() {
+    var sv = (INFO.reserva.servicios || []).filter(function (x) { return ['Desayuno', 'Comida', 'Cena', 'Noche'].indexOf(x.servicio) >= 0; });
+    if (!sv.length || (INFO.enviado && INFO.estado !== 'Aplicado')) return false;
+    var p = { adultos: 0, ninos: 0, bebes: 0 };
+    sv.forEach(function (x) { p.adultos = Math.max(p.adultos, x.adultos || 0); p.ninos = Math.max(p.ninos, x.ninos || 0); p.bebes = Math.max(p.bebes, x.bebes || 0); });
+    F.personas = p; F.servMap = {};
+    Object.keys(serviciosPosibles()).forEach(function (k) { F.servMap[k] = 0; });
+    sv.forEach(function (x) { F.servMap[x.fecha + '|' + x.servicio] = (x.adultos || 0) + (x.ninos || 0) + (x.bebes || 0); });
+    return true;
   }
   /** Todos los que comen y duermen (también los de 0 a 4, que son gratis). */
   function totalPersonas() { return F.personas.adultos + F.personas.ninos + F.personas.bebes; }

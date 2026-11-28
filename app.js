@@ -3,7 +3,7 @@
   'use strict';
   var C = window.CONFIG || {};
   var DEMO = !C.API_URL;
-  var VERSION = '2.5.3';
+  var VERSION = '2.5.4';
   var VERSION_FECHA = '28/11/2026';
   var S = { clave: null, gestor: null, datos: null, mes: null, sinConexion: false, filtro: 'proximas', verCanceladas: false,
             relModo: 'todas', relDesde: '', relHasta: '', findesTodos: false };
@@ -1434,8 +1434,8 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
             S.hayCambios = null;
             toast((r ? 'Cambios guardados' : 'Reserva creada') + (res.solapes && res.solapes.length ? ' · coincide con: ' + res.solapes.join(', ') : ''));
             var seguirA = function () { reemplazar(r ? destVolver : ('reserva/' + encodeURIComponent(res.id))); };
-            var nr = reserva(res.id);  // 2.5.2: primer presupuesto con las comidas calculadas
-            return nr ? asegurarServicios(nr).catch(function () {}).then(seguirA) : seguirA();
+            var nr = reserva(res.id);  // 2.5.2: primer presupuesto con las comidas calculadas; 2.5.4: al editar, se reajustan
+            return nr ? (r ? reajustarServicios(r, nr) : asegurarServicios(nr)).catch(function () {}).then(seguirA) : seguirA();
           })
           .catch(function (e) { toast(e.message, true); })
           .then(function () { cargando(false); });
@@ -1565,6 +1565,45 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
     if (!r || (r.servicios || []).length || !p || tipo(r) === 'Bloqueo' || (r.formulario && r.formulario.estado === 'Aplicado')) return Promise.resolve(r);
     var lista = serviciosCalculados(r, p, 0, 0);
     if (!lista.length) return Promise.resolve(r);
+    return usarDB(function () { return DB.guardarServicios(r.id, lista, {}); }).then(function () { return reserva(r.id) || r; });
+  }
+  /** 2.5.4: al cambiar fechas, horas o personas de una reserva que ya tiene comidas, manda lo último guardado:
+      las comidas que ya estaban se quedan como estaban (también las quitadas), las nuevas que entran por las fechas se añaden
+      con todo el grupo, las que quedan fuera se borran, y si cambian las personas se suman o restan a los adultos
+      en las comidas que tenían a todo el grupo. */
+  function reajustarServicios(antes, r) {
+    if (!antes || !r || tipo(r) === 'Bloqueo') return Promise.resolve(r);
+    var sv = r.servicios || [];
+    if (!sv.length) return asegurarServicios(r);
+    var COM = ['Desayuno', 'Comida', 'Cena', 'Noche'];
+    function esComida(x) { return COM.indexOf(x.servicio) >= 0; }
+    function tot(x) { return (x.adultos || 0) + (x.ninos || 0) + (x.bebes || 0); }
+    var cambiaFechas = antes.entrada !== r.entrada || antes.salida !== r.salida || (antes.horaEntrada || '12:00') !== (r.horaEntrada || '12:00') ||
+      (antes.horaSalida || '16:00') !== (r.horaSalida || '16:00') || tipo(antes) !== tipo(r);
+    var dif = (Number(r.personas) || 0) - (Number(antes.personas) || 0);
+    if (!cambiaFechas && !dif) return Promise.resolve(r);
+    var viejos = {}, nuevos = {};
+    serviciosCalculados(antes, 1, 0, 0).forEach(function (h) { viejos[h.fecha + '|' + h.servicio] = true; });
+    serviciosCalculados(r, 1, 0, 0).forEach(function (h) { nuevos[h.fecha + '|' + h.servicio] = true; });
+    var pax = { a: 0, n: 0, b: 0 };
+    sv.filter(esComida).forEach(function (x) { pax.a = Math.max(pax.a, x.adultos || 0); pax.n = Math.max(pax.n, x.ninos || 0); pax.b = Math.max(pax.b, x.bebes || 0); });
+    var grupo = pax.a + pax.n + pax.b;
+    if (dif) pax.a = Math.max(0, pax.a + dif);
+    var lista = [], hay = {};
+    sv.forEach(function (x) {
+      var y = { fecha: x.fecha, servicio: x.servicio, adultos: x.adultos || 0, ninos: x.ninos || 0, bebes: x.bebes || 0 };
+      if (esComida(x)) {
+        if (!nuevos[x.fecha + '|' + x.servicio]) return;  // queda fuera de las fechas nuevas
+        if (dif && tot(x) === grupo) y.adultos = Math.max(0, y.adultos + dif);
+        if (!tot(y)) return;
+        hay[x.fecha + '|' + x.servicio] = true;
+      } else if (x.fecha < r.entrada || x.fecha > r.salida) return;
+      lista.push(y);
+    });
+    if (pax.a + pax.n + pax.b) Object.keys(nuevos).forEach(function (k) {
+      if (viejos[k] || hay[k]) return;  // las que ya existían (o estaban quitadas) no se tocan
+      var p = k.split('|'); lista.push({ fecha: p[0], servicio: p[1], adultos: pax.a, ninos: pax.n, bebes: pax.b });
+    });
     return usarDB(function () { return DB.guardarServicios(r.id, lista, {}); }).then(function () { return reserva(r.id) || r; });
   }
   function calcularHoja(r) {
